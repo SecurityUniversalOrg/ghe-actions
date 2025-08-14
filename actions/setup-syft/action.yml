@@ -1,0 +1,9 @@
+name: "Setup Syft"
+description: "Install Syft for SBOM generation"
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh           | sh -s -- -b /usr/local/bin

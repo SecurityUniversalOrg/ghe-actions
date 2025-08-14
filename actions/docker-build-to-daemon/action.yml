@@ -1,0 +1,39 @@
+name: "Docker Build to local daemon"
+description: "Build image with buildx and load into local docker daemon (single-arch)"
+inputs:
+  context:    { required: true }
+  dockerfile: { required: true }
+  image:      { required: true }
+  tags:       { required: true }
+  build_args: { required: false }
+  platform:   { required: false, default: linux/amd64 }
+outputs:
+  primary_ref:
+    value: ${{ steps.out.outputs.primary_ref }}
+runs:
+  using: "composite"
+  steps:
+    - uses: docker/setup-qemu-action@v3
+    - uses: docker/setup-buildx-action@v3
+    - id: build
+      shell: bash
+      run: |
+        set -euo pipefail
+        IFS=',' read -ra T <<< "${{ inputs.tags }}"
+        TAG_ARGS=""
+        for t in "${T[@]}"; do
+          TAG_ARGS="$TAG_ARGS -t ${{ inputs.image }}:${t}"
+        done
+        BA_ARGS=""
+        if [ -n "${{ inputs.build_args }}" ]; then
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            BA_ARGS="$BA_ARGS --build-arg $line"
+          done <<< "${{ inputs.build_args }}"
+        fi
+        docker buildx build           --platform "${{ inputs.platform }}"           ${BA_ARGS} ${TAG_ARGS}           --load           -f "${{ inputs.dockerfile }}"           "${{ inputs.context }}"
+        echo "primary_ref=${{ inputs.image }}:${T[0]}" >> "$GITHUB_OUTPUT"
+    - id: out
+      shell: bash
+      run: |
+        grep '^primary_ref=' "$GITHUB_OUTPUT" || true

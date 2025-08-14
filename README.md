@@ -1,2 +1,3 @@
 # platform-actions
-Seed content.
+
+Central catalog of reusable **composite actions** and **reusable workflows** for your ARC platform.

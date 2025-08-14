@@ -1,0 +1,14 @@
+name: "Trivy scan (OCI archive tar)"
+description: "Scan a single-arch OCI image tarball with Trivy (gates on severity)"
+inputs:
+  archive:       { required: true }
+  severity:      { required: false, default: "CRITICAL,HIGH" }
+  ignore_unfixed:{ required: false, default: "true" }
+runs:
+  using: "composite"
+  steps:
+    - uses: SecurityUniversalOrg/platform-actions/actions/setup-trivy@main
+    - shell: bash
+      run: |
+        set -euo pipefail
+        trivy image --input "${{ inputs.archive }}"           --exit-code 1 --severity "${{ inputs.severity }}"           --ignore-unfixed=${{ inputs.ignore_unfixed }}

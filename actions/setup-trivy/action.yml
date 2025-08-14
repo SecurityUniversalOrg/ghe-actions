@@ -1,0 +1,9 @@
+name: "Setup Trivy"
+description: "Install Trivy scanner"
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh           | sh -s -- -b /usr/local/bin
