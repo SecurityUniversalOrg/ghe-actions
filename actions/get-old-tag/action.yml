@@ -1,0 +1,116 @@
+# platform-actions/get-old-tag/action.yml
+name: "Get Old Tag from Registry"
+description: "Fetch the latest monthly/P-series tag from a container registry, tolerating empty/new repos."
+author: "SecurityUniversal"
+
+branding:
+  icon: "tag"
+  color: "blue"
+
+inputs:
+  image:
+    description: "Full image name (e.g., docker.io/namespace/repo)"
+    required: true
+  include_regex:
+    description: "Regex for acceptable tags (default matches -YYYY.MM(.PX) suffix)"
+    required: false
+    default: '-[0-9]{4}\.[0-9]{2}(\.P[0-9]+)?$'
+  exclude_regex:
+    description: "Regex for tags to exclude (cosign, sbom, att, digests)"
+    required: false
+    default: '(^sha256-|\.sig$|\.att$|\.sbom$)'
+  fail_if_missing:
+    description: "If true, fail when no matching tag is found; otherwise return empty old_tag"
+    required: false
+    default: 'false'
+  verbose:
+    description: "If true, echo debug details"
+    required: false
+    default: 'false'
+
+outputs:
+  old_tag:
+    description: "The latest matching tag (empty if none found and fail_if_missing=false)"
+    value: ${{ steps.probe.outputs.old_tag }}
+  has_old_tag:
+    description: "true if a matching tag was found, else false"
+    value: ${{ steps.probe.outputs.has_old_tag }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate prerequisites
+      shell: bash
+      run: |
+        set -euo pipefail
+        for bin in skopeo jq; do
+          if ! command -v "$bin" >/dev/null 2>&1; then
+            echo "::error::Required tool '$bin' not found on PATH."
+            echo "This action requires 'skopeo' and 'jq' on the runner."
+            exit 1
+          fi
+        done
+
+    - name: Get old tag (tolerate empty/new repos)
+      id: probe
+      shell: bash
+      env:
+        IMAGE_NAME: ${{ inputs.image }}
+        INCLUDE_RE: ${{ inputs.include_regex }}
+        EXCLUDE_RE: ${{ inputs.exclude_regex }}
+        FAIL_IF_MISSING: ${{ inputs.fail_if_missing }}
+        VERBOSE: ${{ inputs.verbose }}
+      run: |
+        set -euo pipefail
+
+        if [[ "${VERBOSE}" == "true" ]]; then
+          echo "Image: ${IMAGE_NAME}"
+          echo "Include regex: ${INCLUDE_RE}"
+          echo "Exclude regex: ${EXCLUDE_RE}"
+          echo "Fail if missing: ${FAIL_IF_MISSING}"
+        fi
+
+        # Probe tags but don't fail if repo is new/empty
+        set +e
+        set +o pipefail
+        RAW_JSON=$(skopeo list-tags "docker://${IMAGE_NAME}" 2>/dev/null)
+        SKOPEO_STATUS=$?
+        set -o pipefail
+        set -e
+
+        if [ $SKOPEO_STATUS -ne 0 ] || [ -z "${RAW_JSON}" ]; then
+          echo "Repository not accessible or has no tags yet for ${IMAGE_NAME}."
+          echo "old_tag=" >> "$GITHUB_OUTPUT"
+          echo "has_old_tag=false" >> "$GITHUB_OUTPUT"
+          if [[ "${FAIL_IF_MISSING}" == "true" ]]; then
+            echo "::error::No tags found and fail_if_missing=true."
+            exit 1
+          fi
+          exit 0
+        fi
+
+        # Filter and sort tags; don't fail if no grep matches
+        set +o pipefail
+        tags=$(printf '%s' "${RAW_JSON}" \
+          | jq -r '.Tags[]' 2>/dev/null \
+          | grep -Ev "${EXCLUDE_RE}" \
+          | grep -E  "${INCLUDE_RE}" \
+          | sort -V)
+        set -o pipefail
+
+        old_tag="$(tail -n 1 <<< "${tags:-}" || true)"
+
+        if [ -z "${old_tag:-}" ]; then
+          echo "No tags match include_regex for ${IMAGE_NAME}."
+          echo "old_tag=" >> "$GITHUB_OUTPUT"
+          echo "has_old_tag=false" >> "$GITHUB_OUTPUT"
+          if [[ "${FAIL_IF_MISSING}" == "true" ]]; then
+            echo "::error::No matching tags and fail_if_missing=true."
+            exit 1
+          fi
+          exit 0
+        fi
+
+        echo "Old tag is: ${old_tag}"
+        echo "old_tag=${old_tag}" >> "$GITHUB_OUTPUT"
+        echo "has_old_tag=true" >> "$GITHUB_OUTPUT"
