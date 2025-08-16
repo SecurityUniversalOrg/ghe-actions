@@ -1,0 +1,18 @@
+name: "Docker Push to container registiry"
+description: "Push an image with docker to a container registry (single-arch)"
+inputs:
+  primary_ref:        { required: true }
+  secondary_ref:      { required: true }
+  
+runs:
+  using: "composite"
+  steps:
+    - id: push
+      shell: bash
+      env:
+        PRIMARY_FULL_IMAGE_REF: ${{ inputs.primary_ref }}
+        SECONDARY_FULL_IMAGE_REF: ${{ inputs.secondary_ref }}
+      run: |
+        set -euo pipefail
+        docker push "${PRIMARY_FULL_IMAGE_REF}"
+        docker push "${SECONDARY_FULL_IMAGE_REF}"
