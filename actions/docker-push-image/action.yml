@@ -1,4 +1,4 @@
-name: "Docker Push to container registiry"
+name: "Docker Push to container registry"
 description: "Push an image with docker to a container registry (single-arch)"
 inputs:
   primary_ref:        { required: true }

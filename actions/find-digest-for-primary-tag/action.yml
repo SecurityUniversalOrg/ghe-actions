@@ -1,0 +1,26 @@
+name: "Find digest value"
+description: "Find digest value from the primary tag value"
+
+inputs:
+  primary_ref:        { required: true }
+
+outputs:
+  digest:
+    value: ${{ steps.find.outputs.digest }}
+  full_ref:
+    value: ${{ steps.find.outputs.full_ref }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: find
+      shell: bash
+      env:
+        REF: ${{ inputs.primary_ref }}
+      run: |
+        set -euo pipefail
+        # Use skopeo to read the pushed tag’s manifest digest from the registry
+        DIGEST=$(skopeo inspect "docker://${REF}" | jq -r .Digest)
+        echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+        echo "full_ref=${REF%@*}@${DIGEST}" >> "$GITHUB_OUTPUT"
+        echo "Resolved: ${REF} -> ${DIGEST}"
