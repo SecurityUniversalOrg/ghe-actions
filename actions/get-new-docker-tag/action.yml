@@ -31,6 +31,9 @@ runs:
     - name: Generate new docker tag
       id: calctag
       shell: bash
+      env:
+        IMAGE_REPO: ${{ inputs.image_repo }}
+        CANDIDATE_TAG: ${{ inputs.candidate_tag }}
       run: |
         set -euo pipefail
 
