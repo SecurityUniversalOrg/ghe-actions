@@ -93,8 +93,8 @@ runs:
         set +o pipefail
         tags=$(printf '%s' "${RAW_JSON}" \
           | jq -r '.Tags[]' 2>/dev/null \
-          | grep -Ev "${EXCLUDE_RE}" \
-          | grep -E  "${INCLUDE_RE}" \
+          | grep -Ev -- "${EXCLUDE_RE}" \
+          | grep -E  -- "${INCLUDE_RE}" \
           | sort -V)
         set -o pipefail
 
