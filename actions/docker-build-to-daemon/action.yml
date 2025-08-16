@@ -1,15 +1,20 @@
 name: "Docker Build to local daemon"
 description: "Build image with buildx and load into local docker daemon (single-arch)"
 inputs:
-  context:    { required: true }
-  dockerfile: { required: true }
-  image:      { required: true }
-  tags:       { required: true }
-  build_args: { required: false }
-  platform:   { required: false, default: linux/amd64 }
+  docker_repo:        { required: true }
+  image:              { required: true }
+  tag_primary:        { required: true }
+  tag_secondary:      { required: true }
+  dockerfile_path:    { required: true }
 outputs:
-  primary_ref:
-    value: ${{ steps.out.outputs.primary_ref }}
+  image_ref:
+    value: ${{ steps.build.outputs.image_ref }}
+  image_name:
+    value: ${{ steps.build.outputs.image_name }}
+  image_tags:
+    value: ${{ steps.build.outputs.image_tags }}
+  sbom_path:
+    value: ${{ steps.build.outputs.sbom_path }}
 runs:
   using: "composite"
   steps:
@@ -17,23 +22,31 @@ runs:
     - uses: docker/setup-buildx-action@v3
     - id: build
       shell: bash
+      env:
+        REPO: ${{ inputs.docker_repo }}
+        NAME: ${{ inputs.image }}
+        TAG_PRIMARY: ${{ inputs.tag_primary }}
+        TAG_SECONDARY: ${{ inputs.tag_secondary }}
+        DOCKERFILE_PATH: ${{ inputs.dockerfile_path }}
       run: |
         set -euo pipefail
-        IFS=',' read -ra T <<< "${{ inputs.tags }}"
-        TAG_ARGS=""
-        for t in "${T[@]}"; do
-          TAG_ARGS="$TAG_ARGS -t ${{ inputs.image }}:${t}"
-        done
-        BA_ARGS=""
-        if [ -n "${{ inputs.build_args }}" ]; then
-          while IFS= read -r line; do
-            [ -z "$line" ] && continue
-            BA_ARGS="$BA_ARGS --build-arg $line"
-          done <<< "${{ inputs.build_args }}"
-        fi
-        docker buildx build           --platform "${{ inputs.platform }}"           ${BA_ARGS} ${TAG_ARGS}           --load           -f "${{ inputs.dockerfile }}"           "${{ inputs.context }}"
-        echo "primary_ref=${{ inputs.image }}:${T[0]}" >> "$GITHUB_OUTPUT"
-    - id: out
-      shell: bash
-      run: |
-        grep '^primary_ref=' "$GITHUB_OUTPUT" || true
+
+        # Build (single-arch, loaded into local daemon)
+        docker buildx build \
+          --platform linux/amd64 \
+          --build-arg DATE_TAG='${{ matrix.date_tag }}' \
+          -t "${REPO}/${NAME}:${TAG_PRIMARY}" \
+          -t "${REPO}/${NAME}:${TAG_SECONDARY}" \
+          --load \
+          -f "${DOCKERFILE_PATH}/Dockerfile" \
+          .
+
+        # Compute outputs
+        # "image_ref" -> primary tag; "image_name" -> repository/name
+        echo "image_ref=${REPO}/${NAME}:${TAG_PRIMARY}" >> "$GITHUB_OUTPUT"
+        echo "image_name=${REPO}/${NAME}" >> "$GITHUB_OUTPUT"
+        # (optionally expose both tags)
+        echo "image_tags=${TAG_PRIMARY},${TAG_SECONDARY}" >> "$GITHUB_OUTPUT"
+        SBOM_PATH="${REPO//\//-}-${NAME}"
+        echo "sbom_path=${SBOM_PATH}" >> "$GITHUB_OUTPUT"
+
