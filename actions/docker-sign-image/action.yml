@@ -7,7 +7,7 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - id: find
+    - id: sign
       shell: bash
       env:
         REF: ${{ inputs.primary_ref }}
