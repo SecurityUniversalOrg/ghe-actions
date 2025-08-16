@@ -1,0 +1,17 @@
+name: "Sign a Docker image"
+description: "Use cosign to sign a docker image"
+
+inputs:
+  primary_ref:        { required: true }
+
+runs:
+  using: "composite"
+  steps:
+    - id: find
+      shell: bash
+      env:
+        REF: ${{ inputs.primary_ref }}
+        COSIGN_EXPERIMENTAL: "true"
+      run: |
+        set -euo pipefail
+        cosign sign "${REF}"
