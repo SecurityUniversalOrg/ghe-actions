@@ -1,0 +1,49 @@
+name: "Docker Repo Dispatch"
+description: "Notify downstream docker repos via the repo_dispatch call"
+
+inputs:
+  dispatch_token:       
+    required: true
+    type: string
+  subset_json:
+    required: true
+    type: string
+  repo_ns:
+    required: true
+    type: string
+  dispatch_repo:
+    required: true
+    type: string
+
+runs:
+  using: "composite"
+  steps:
+    - id: repo-dispatch
+      shell: bash
+      env:
+        DISPATCH_TOKEN: ${{ inputs.dispatch_token }}
+        # Pass the matrix subset (JSON array string like ["base-ubuntu", ...])
+        SUBSET_JSON: ${{ inputs.subset_json }}
+        NAMESPACE: ${{ inputs.repo_ns }}
+        DISPATCH_REPO: ${{ inputs.dispatch_repo }}
+      run: |
+        set -euo pipefail
+
+        # Fallback to empty JSON array if unset/empty to satisfy set -u and jq --argjson
+        : "${SUBSET_JSON:='[]'}"
+
+        # (ubuntu-latest already has jq; install only if missing)
+        command -v jq >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y jq; }
+
+        BODY=$(jq -n \
+        --arg event "base-images-updated" \
+        --arg ns "${NAMESPACE}" \
+        --argjson subset "${SUBSET_JSON}" \
+        '{event_type:$event, client_payload:{dockerhub_namespace:$ns, subset:$subset}}')
+
+        curl -sS -X POST \
+        -H "Accept: application/vnd.github+json" \
+        -H "Authorization: Bearer ${DISPATCH_TOKEN}" \
+        -H "User-Agent: repo-dispatch" \
+        https://api.github.com/repos/${DISPATCH_REPO}/dispatches \
+        -d "${BODY}"
