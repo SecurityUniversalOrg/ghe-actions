@@ -2,7 +2,7 @@ name: "Attach Container SBOM"
 description: "Attach a Docker Container SBOM using cosign"
 inputs:
   primary_ref:        { required: true }
-  
+  matrix_name:        { required: true }
 runs:
   using: "composite"
   steps:
@@ -17,3 +17,10 @@ runs:
           --type spdx \
           --predicate sbom.spdx.json \
           "${PRIMARY_FULL_IMAGE_REF}"
+    
+    - uses: actions/upload-artifact@v4
+      env:
+        MATRIX_NAME: ${{ inputs.matrix_name }}
+      with:
+        name: sbom-$MATRIX_NAME
+        path: sbom.spdx.json
