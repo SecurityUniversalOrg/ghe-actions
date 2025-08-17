@@ -1,0 +1,28 @@
+name: "Validate Repo Dispatch Sender"
+description: "Determine if the sender of the repo dispatch is on the allowed list"
+
+inputs:
+  allowed_senders:       
+    required: true
+    type: string
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check if sender allowed
+      id: check
+      shell: bash
+      env:
+        ALLOWED_SENDERS: ${{ inputs.allowed_senders }}
+      run: |
+        set -euo pipefail
+        SENDER='${{ github.event.sender.login }}'
+        ALLOWED="${ALLOWED_SENDERS:-}"
+        if [ -n "$ALLOWED" ]; then
+          IFS=',' read -ra ALR <<< "$ALLOWED"
+          OK=false
+          for a in "${ALR[@]}"; do
+            [ "$SENDER" = "$a" ] && OK=true
+          done
+          $OK || { echo "Unauthorized sender: $SENDER"; exit 1; }
+        fi
