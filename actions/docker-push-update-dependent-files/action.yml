@@ -6,6 +6,7 @@ inputs:
   base_name:   { required: true }
   old_tag:     { required: true }
   new_tag:     { required: true }
+  subset:     { required: true }
 
 runs:
   using: "composite"
@@ -19,6 +20,7 @@ runs:
         BASE_NAME: ${{ inputs.base_name }}
         OLD_TAG:   ${{ inputs.old_tag }}
         NEW_TAG:   ${{ inputs.new_tag }}
+        SUBSET:    ${{ inputs.subset }}
         # make git/gh non-interactive
         GIT_ASKPASS: /bin/true
         GIT_TERMINAL_PROMPT: "0"
@@ -37,7 +39,7 @@ runs:
         git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
 
         # Parse targets (JSON array of "image:owner/repo")
-        mapfile -t TARGETS < <(jq -r '.[]' <<< '${{ steps.in.outputs.subset }}')
+        mapfile -t TARGETS < <(jq -r '.[]' <<< '${SUBSET}')
 
         # Group by repo -> images
         tmpdir="$(mktemp -d)"
