@@ -1,0 +1,31 @@
+name: "Find matrix subset"
+description: "Find matrix subset value"
+
+inputs:
+  subset:        { required: true }
+
+outputs:
+  subset:
+    value: ${{ steps.find-subset.outputs.subset }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: find-subset
+      shell: bash
+      env:
+        SUBSET: ${{ inputs.subset }}
+      run: |
+        set -euo pipefail
+        if [ -n "${SUBSET}" ]; then
+          echo "subset=${SUBSET}" >> "$GITHUB_OUTPUT"
+        elif [ -n "${{ toJson(github.event.client_payload.subset) }}" ]; then
+          # Join the array into a comma-separated string
+          echo "subset=${{ join(github.event.client_payload.subset, ',') }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "No subset provided, using full matrix."
+          echo "subset=${SUBSET}" >> "$GITHUB_OUTPUT"
+        fi
+        echo "Debug GitHub Event: ${{ toJson(github.event) }}"
+        echo "Subset value from GITHUB_OUTPUT:"
+        grep '^subset=' "$GITHUB_OUTPUT" | sed 's/^subset=//'
