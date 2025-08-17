@@ -1,0 +1,25 @@
+name: "Emit Docker Update Record"
+description: "Emit the update record for the new Docker tag created by the pipeline"
+inputs:
+  primary_ref:        { required: true }
+  matrix_name:        { required: true }
+runs:
+  using: "composite"
+  steps:
+    - id: emit-update
+      shell: bash
+      env:
+        PRIMARY_FULL_IMAGE_REF: ${{ inputs.primary_ref }}
+        MATRIX_NAME: ${{ inputs.matrix_name }}
+      run: |
+        set -euo pipefail
+        mkdir -p out
+        echo "{\"name\":\"${MATRIX_NAME}\",\"new_tag\":\"${PRIMARY_FULL_IMAGE_REF}\"}" \
+        > "out/update-${MATRIX_NAME}.json"
+    
+    - uses: actions/upload-artifact@v4
+      env:
+        MATRIX_NAME: ${{ inputs.matrix_name }}
+      with:
+        name: updates-${MATRIX_NAME}
+        path: out/update-${MATRIX_NAME}.json
