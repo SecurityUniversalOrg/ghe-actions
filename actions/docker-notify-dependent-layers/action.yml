@@ -1,0 +1,38 @@
+name: "Notify dependent Docker Layers"
+description: "Notify Docker image layers that are dependent on updated layers"
+
+inputs:
+  gh_token:        { required: true }
+  subset_json:     { required: true }
+  matrix_name:     { required: true }
+  old_tag:         { required: true }
+  new_tag:         { required: true }
+
+runs:
+  using: "composite"
+  steps:
+    - id: notify
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.gh_token }}   # PAT or GitHub App token scoped to the *updater repo*
+        REPO:  ${{ github.repository }}          # target repo (Workflow B lives here)
+        SUBSET_JSON: ${{ inputs.subset_json }}
+        MATRIX_NAME: ${{ inputs.matrix_name }}
+        OLD_TAG: ${{ inputs.old_tag }}
+        NEW_TAG: ${{ inputs.new_tag }}
+        REG_PREFIX: ${{ github.event.client_payload.dockerhub_namespace }}
+      run: |
+        set -euo pipefail
+        BODY=$(jq -n \
+          --arg event "update-dependent-dockerfiles" \
+          --arg base  "${MATRIX_NAME}" \
+          --arg old   "${OLD_TAG}" \
+          --arg new   "${NEW_TAG}" \
+          --arg reg   "${REG_PREFIX}" \
+          --argjson subset "${SUBSET_JSON}" \
+          '{event_type:$event, client_payload:{base_name:$base, old_tag:$old, new_tag:$new, reg_prefix:$reg, subset:$subset}}')
+        curl -sS -X POST \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${TOKEN}" \
+          https://api.github.com/repos/${REPO}/dispatches \
+          -d "${BODY}"

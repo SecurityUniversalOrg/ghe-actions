@@ -22,5 +22,5 @@ runs:
       env:
         MATRIX_NAME: ${{ inputs.matrix_name }}
       with:
-        name: sbom-$MATRIX_NAME
+        name: sbom-${MATRIX_NAME}
         path: sbom.spdx.json
