@@ -1,0 +1,25 @@
+name: "Find dependent Docker layers"
+description: "Find Docker image layers that are dependent on updated layers"
+
+inputs:
+  roots:             { required: true }
+
+outputs:
+  subset:
+    value: ${{ steps.find.outputs.subset }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: find
+      shell: bash
+      env:
+        ROOTS: ${{ inputs.roots }}
+        FULL_REBUILD: false
+        EVENT_NAME: ${{ github.event_name }}
+      run: |
+        set -euo pipefail
+        echo "Computing cascade subset with roots: '${ROOTS}'"
+        python3 -s scripts/find_dependencies.py
+        echo "Need to rebuild:"
+        grep '^subset=' "$GITHUB_OUTPUT" | sed 's/^subset=//'
