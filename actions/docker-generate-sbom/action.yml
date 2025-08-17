@@ -1,0 +1,22 @@
+name: "Generate Container SBOM"
+description: "Generate a Docker Container SBOM using SPDX or CycloneDX"
+inputs:
+  primary_ref:        { required: true }
+  
+runs:
+  using: "composite"
+  steps:
+    - id: generate-sbom
+      shell: bash
+      env:
+        PRIMARY_FULL_IMAGE_REF: ${{ inputs.primary_ref }}
+      run: |
+        set -euo pipefail
+        # After you’ve resolved DIGEST for the pushed image:
+        FULL_REF="${PRIMARY_FULL_IMAGE_REF}"
+
+        # Generate SBOM tied to the digest
+        syft "registry:${FULL_REF}" -o spdx-json > sbom.spdx.json
+
+        # Attach it
+        COSIGN_EXPERIMENTAL=true cosign attest --type spdx --predicate sbom.spdx.json "${FULL_REF}"
