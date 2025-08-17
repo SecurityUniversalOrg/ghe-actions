@@ -1,0 +1,31 @@
+name: "Find cascade subset"
+description: "Use the scripts/compute_cascase_subset.py file to find the subset value."
+
+inputs:
+  roots:       
+    required: true
+    type: string
+  full_rebuild:
+    required: false
+    default: false
+    type: boolean
+
+outputs:
+  subset:
+    value: ${{ steps.find-subset.outputs.subset }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: find-subset
+      shell: bash
+      env:
+        ROOTS: ${{ inputs.roots }}
+        FULL_REBUILD: ${{ inputs.full_rebuild }}
+        EVENT_NAME: ${{ github.event_name }}
+      run: |
+        set -euo pipefail
+        echo "Computing cascade subset with roots: '${{ inputs.roots }}' and full_rebuild=${{ inputs.full_rebuild }}"
+        python3 -s scripts/compute_cascade_subset.py
+        echo "Subset from GITHUB_OUTPUT:"
+        grep '^subset=' "$GITHUB_OUTPUT" | sed 's/^subset=//'
