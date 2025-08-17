@@ -1,0 +1,37 @@
+name: "Apply Updates to matrix.yml"
+description: "Apply all of the updates to matrix.yml"
+  
+runs:
+  using: "composite"
+  steps:
+    - id: update
+      shell: bash
+      run: |
+        set -euo pipefail
+        shopt -s nullglob
+
+        found=0
+        for f in updates/update-*.json; do
+          NAME_VAL=$(jq -r .name < "$f")
+          TAG_VAL=$(jq -r .new_tag < "$f")
+
+          if [[ -z "$NAME_VAL" || -z "$TAG_VAL" || "$NAME_VAL" == "null" || "$TAG_VAL" == "null" ]]; then
+            echo "Skipping $f (empty or null name/tag)"
+            continue
+          fi
+
+          echo "Updating $NAME_VAL -> $TAG_VAL"
+          found=1
+
+          # Export env vars for yq env()
+          NAME="$NAME_VAL" TAG="$TAG_VAL" yq -i '
+            (.images[] | select(.name == env(NAME)) .tags[0]) = env(TAG)
+          ' matrix.yaml
+        done
+
+        if [[ $found -eq 0 ]]; then
+          echo "No updates found; exiting without changes."
+          exit 0
+        fi
+
+        echo "Preview changes:"; git diff -- matrix.yaml || true
