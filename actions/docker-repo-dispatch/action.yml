@@ -11,9 +11,6 @@ inputs:
   repo_ns:
     required: true
     type: string
-  dispatch_repo:
-    required: true
-    type: string
 
 runs:
   using: "composite"
@@ -25,7 +22,7 @@ runs:
         # Pass the matrix subset (JSON array string like ["base-ubuntu", ...])
         SUBSET_JSON: ${{ inputs.subset_json }}
         NAMESPACE: ${{ inputs.repo_ns }}
-        DISPATCH_REPO: ${{ inputs.dispatch_repo }}
+        DISPATCH_REPO: ${{ github.event.repository.full_name }}
       run: |
         set -euo pipefail
 
