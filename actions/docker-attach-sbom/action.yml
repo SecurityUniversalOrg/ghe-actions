@@ -19,8 +19,6 @@ runs:
           "${PRIMARY_FULL_IMAGE_REF}"
     
     - uses: actions/upload-artifact@v4
-      env:
-        MATRIX_NAME: ${{ inputs.matrix_name }}
       with:
-        name: sbom-${MATRIX_NAME}
+        name: sbom-${{ inputs.matrix_name }}
         path: sbom.spdx.json
