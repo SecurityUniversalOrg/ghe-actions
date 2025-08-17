@@ -1,0 +1,29 @@
+name: "Find repo prefix"
+description: "Find repo prefix value"
+
+inputs:
+  repo:        { required: true }
+
+outputs:
+  repo:
+    value: ${{ steps.find-repo.outputs.repo }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: find-repo
+      shell: bash
+      env:
+        REPO: ${{ inputs.repo }}
+        NAMESPACE: ${{ github.event.client_payload.dockerhub_namespace }}
+      run: |
+        set -euo pipefail
+        if [ -n "${REPO}" ]; then
+          echo "repo=${REPO}" >> "$GITHUB_OUTPUT"
+        elif [ -n "${NAMESPACE}" ]; then
+          echo "repo=${NAMESPACE}" >> "$GITHUB_OUTPUT"
+        else
+          python3 ./scripts/resolve_repo_prefix.py >> "$GITHUB_OUTPUT"
+        fi
+        echo "Repo prefix from GITHUB_OUTPUT:"
+        grep '^repo=' "$GITHUB_OUTPUT" | sed 's/^repo=//'
