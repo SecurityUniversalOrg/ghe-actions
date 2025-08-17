@@ -1,0 +1,69 @@
+name: "Open GitHub PR"
+description: "Open a GitHub Pull Request in the Target Repository."
+author: "SecurityUniversal"
+
+branding:
+  icon: "tag"
+  color: "blue"
+
+inputs:
+  gh_token:
+    description: "The GitHub Token with PR Read/Write Permissions"
+    required: true
+  feature_branch:
+    description: "The new branch that is created for the Pull Request"
+    required: false
+    default: "chore/matrix-bump-$(date -u +%Y%m%d%H%M%S)"
+  user_name:
+    description: "The git config user.name value"
+    required: false
+    default: "github-actions[bot]"
+  user_email:
+    description: "The git config user.email value"
+    required: false
+    default: "41898282+github-actions[bot]@users.noreply.github.com"
+  commit_msg:
+    description: "The git commit message for the new branch"
+    required: false
+    default: "chore(matrix): bump primary tags after successful builds"
+  pr_title:
+    description: "The title for the Pull Request"
+    required: false
+    default: "Update matrix: bump primary tags"
+  pr_msg:
+    description: "The message body for the Pull Request"
+    required: false
+    default: "Automated bump of primary tags for images built successfully."
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate prerequisites
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.gh_token }}
+        FEATURE_BRANCH: ${{ inputs.feature_branch }}
+        USER_NAME: ${{ inputs.user_name }}
+        USER_EMAIL: ${{ inputs.user_email }}
+        COMMIT_MSG: ${{ inputs.commit_msg }}
+        PR_TITLE: ${{ inputs.pr_title }}
+        PR_MSG: ${{ inputs.pr_msg }}
+      run: |
+        set -euo pipefail
+        BR="${FEATURE_BRANCH}"
+        git config user.name  "${USER_NAME}"
+        git config user.email "${USER_EMAIL}"
+        git checkout -b "$BR"
+        git add matrix.yaml
+        if git diff --cached --quiet; then
+          echo "No matrix changes; skipping PR."
+          exit 0
+        fi
+        git commit -m "${COMMIT_MSG}"
+        git push -u origin "$BR"
+        BASE_BRANCH="$(git remote show origin | awk '/HEAD branch/ {print $NF}')"
+        [ -n "$BASE_BRANCH" ] || BASE_BRANCH="main"
+        gh pr create \
+          --title "${PR_TITLE}" \
+          --body  "${PR_MSG}" \
+          --base "$BASE_BRANCH" --head "$BR"
