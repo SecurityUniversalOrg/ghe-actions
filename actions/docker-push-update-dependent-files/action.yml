@@ -39,7 +39,7 @@ runs:
         git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
 
         # Parse targets (JSON array of "image:owner/repo")
-        mapfile -t TARGETS < <(jq -r '.[]' <<< '${SUBSET}')
+        mapfile -t TARGETS < <(jq -r '.[]' <<< ${SUBSET})
 
         # Group by repo -> images
         tmpdir="$(mktemp -d)"
