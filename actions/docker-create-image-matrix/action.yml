@@ -6,7 +6,7 @@ inputs:
 
 outputs:
   matrix:
-    value: ${{ steps.find-subset.outputs.matrix }}
+    value: ${{ steps.create-subset.outputs.matrix }}
 
 runs:
   using: "composite"
