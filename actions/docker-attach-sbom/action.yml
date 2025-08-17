@@ -1,0 +1,19 @@
+name: "Attach Container SBOM"
+description: "Attach a Docker Container SBOM using cosign"
+inputs:
+  primary_ref:        { required: true }
+  
+runs:
+  using: "composite"
+  steps:
+    - id: attach-sbom
+      shell: bash
+      env:
+        PRIMARY_FULL_IMAGE_REF: ${{ inputs.primary_ref }}
+        COSIGN_EXPERIMENTAL: "true"
+      run: |
+        set -euo pipefail
+        cosign attest \
+          --type spdx \
+          --predicate sbom.spdx.json \
+          "${PRIMARY_FULL_IMAGE_REF}"
