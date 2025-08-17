@@ -1,0 +1,28 @@
+name: "Extract Dispatch Payload"
+description: "Extract the Payload from the Repository Dispatch"
+
+outputs:
+  base_name:
+    value: ${{ steps.extract.outputs.base_name }}
+  old_tag:
+    value: ${{ steps.extract.outputs.old_tag }}
+  new_tag:
+    value: ${{ steps.extract.outputs.new_tag }}
+  reg_prefix:
+    value: ${{ steps.extract.outputs.reg_prefix }}
+  subset:
+    value: ${{ steps.extract.outputs.subset }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: extract
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "base_name=${{ github.event.client_payload.base_name }}" >> "$GITHUB_OUTPUT"
+        echo "old_tag=${{ github.event.client_payload.old_tag }}"   >> "$GITHUB_OUTPUT"
+        echo "new_tag=${{ github.event.client_payload.new_tag }}"   >> "$GITHUB_OUTPUT"
+        echo "reg_prefix=${{ github.event.client_payload.reg_prefix }}" >> "$GITHUB_OUTPUT"
+        jq -c '.client_payload.subset' <<< '${{ toJson(github.event) }}' > subset.json
+        echo "subset=$(cat subset.json)" >> "$GITHUB_OUTPUT"
