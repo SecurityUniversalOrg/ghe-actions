@@ -1,0 +1,22 @@
+name: "Create matrix subset"
+description: "Create matrix subset value"
+
+inputs:
+  subset:        { required: true }
+
+outputs:
+  matrix:
+    value: ${{ steps.find-subset.outputs.matrix }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: create-subset
+      shell: bash
+      env:
+        SUBSET: ${{ inputs.subset }}
+      run: |
+        set -euo pipefail
+        python3 ./scripts/build_matrix.py
+        echo "Matrix from GITHUB_OUTPUT:"
+        grep '^matrix=' "$GITHUB_OUTPUT" | sed 's/^matrix=//'
