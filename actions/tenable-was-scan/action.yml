@@ -63,6 +63,6 @@ runs:
       run: |
         set -euo pipefail
         
-        pip install --target=/app -r requirements.txt
+        pip install -r requirements.txt
 
         python3 ./src/main/main.py
