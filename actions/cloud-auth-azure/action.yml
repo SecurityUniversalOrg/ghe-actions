@@ -1,0 +1,19 @@
+name: cloud-auth-azure
+description: "Authenticate to Azure using OIDC"
+inputs:
+  azure_client_id:
+    required: true
+  azure_tenant_id:
+    required: true
+  azure_subscription_id:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Azure Login (OIDC)
+      uses: SecurityUniversalOrg/ghe-actions/actions/cloud-auth-configure-azure@v1
+      with:
+        client-id: ${{ inputs.azure_client_id }}
+        tenant-id: ${{ inputs.azure_tenant_id }}
+        subscription-id: ${{ inputs.azure_subscription_id }}
