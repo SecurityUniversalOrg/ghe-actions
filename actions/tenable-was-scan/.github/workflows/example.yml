@@ -1,0 +1,65 @@
+name: Example Tenable WAS Scan Workflow
+on:
+  workflow_dispatch: 
+    inputs:
+      tenable_access_key:
+        description: "Tenable access key"
+        required: true
+        type: string
+      tenable_secret_key:
+        description: "Tenable secret key"
+        required: true
+        type: string
+      folder_name:
+        description: "Name of the folder in which the scan resides"
+        required: false
+        type: string
+        default: "My Scans"
+      scan_name:
+        description: "Scan name used while configuring the WAS scan on Tenable Lumin"
+        required: true
+        type: string
+      check_thresholds:
+        description: "If the user wants to block builds based on the threshold checks"
+        required: false
+        type: boolean
+        default: false
+      wait_for_results:
+        description: "If the action should wait for the scan results"
+        required: false
+        type: boolean
+        default: false
+      low_vulns_threshold:
+        description: "Low vulnerability threshold defined by the user"
+        required: false
+        type: number
+        default: 0
+      medium_vulns_threshold:
+        description: "Medium vulnerability threshold defined by the user"
+        required: false
+        type: number
+        default: 0
+      high_vulns_threshold:
+        description: "High vulnerability threshold defined by the user"
+        required: false
+        type: number
+        default: 0
+      critical_vulns_threshold:
+        description: "Critical vulnerability threshold defined by the user"
+        required: false
+        type: number
+        default: 0
+jobs:
+  trigger:
+    uses: SecurityUniversalOrg/platform-actions/actions/tenable-was-scan@v1
+    with:
+      tenable_access_key: ${{ inputs.tenable_access_key }}
+      tenable_secret_key: ${{ inputs.tenable_secret_key }}
+      folder_name: ${{ inputs.folder_name }}
+      scan_name: ${{ inputs.scan_name }}
+      check_thresholds: ${{ inputs.check_thresholds }}
+      wait_for_results: ${{ inputs.wait_for_results }}
+      low_vulns_threshold: ${{ inputs.low_vulns_threshold }}
+      medium_vulns_threshold: ${{ inputs.medium_vulns_threshold }}
+      high_vulns_threshold: ${{ inputs.high_vulns_threshold }}
+      critical_vulns_threshold: ${{ inputs.critical_vulns_threshold }}

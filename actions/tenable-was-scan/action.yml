@@ -1,0 +1,68 @@
+name: "Tenable WAS Scan"
+description: "Conduct a scan using Tenable Web Application Scanner."
+author: "SecurityUniversal"
+
+branding:
+  icon: "tag"
+  color: "blue"
+
+inputs:
+  tenable_access_key:
+    description: "Tenable access key"
+  tenable_secret_key:
+    description: "Tenable secret key"
+  folder_name:
+    description: "Name of the folder in which the scan resides"
+    default: "My Scans"
+  scan_name:
+    description: "Scan name used while configuring the WAS scan on Tenable Lumin"
+  check_thresholds:
+    description: "If the user wants to block builds based on the threshold checks"
+    default: "false"
+  wait_for_results:
+    description: "If the action should wait for the scan results"
+    default: "false"
+  low_vulns_threshold:
+    description: "Low vulnerability threshold defined by the user"
+    default: 0
+  medium_vulns_threshold:
+    description: "Medium vulnerability threshold defined by the user"
+    default: 0
+  high_vulns_threshold:
+    description: "High vulnerability threshold defined by the user"
+    default: 0
+  critical_vulns_threshold:
+    description: "Critical vulnerability threshold defined by the user"
+    default: 0
+outputs:
+  number_of_low_severity_findings:
+    description: "Number of low severity findings"
+  number_of_medium_severity_findings:
+    description: "Number of medium severity findings"
+  number_of_high_severity_findings:
+    description: "Number of high severity findings"
+  number_of_critical_severity_findings:
+    description: "Number of critical severity findings"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate prerequisites
+      shell: bash
+      env:
+        ACCESS_KEY: ${{ inputs.tenable_access_key }}
+        SECRET_KEY: ${{ inputs.tenable_secret_key }}
+        INPUT_SCAN_NAME: ${{ inputs.scan_name }}
+        INPUT_FOLDER_NAME: ${{ inputs.folder_name }}
+        INPUT_LOW_VULNS_THRESHOLD: ${{ inputs.low_vulns_threshold }}
+        INPUT_MEDIUM_VULNS_THRESHOLD: ${{ inputs.medium_vulns_threshold }}
+        INPUT_HIGH_VULNS_THRESHOLD: ${{ inputs.high_vulns_threshold }}
+        INPUT_CRITICAL_VULNS_THRESHOLD: ${{ inputs.critical_vulns_threshold }}
+        INPUT_CHECK_THRESHOLDS: ${{ inputs.check_thresholds }}
+        INPUT_WAIT_FOR_RESULTS: ${{ inputs.wait_for_results }}
+      run: |
+        set -euo pipefail
+        
+        pip install --target=/app -r requirements.txt
+
+        python3 ./src/main/main.py

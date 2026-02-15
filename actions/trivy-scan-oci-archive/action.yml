@@ -3,7 +3,7 @@ description: "Scan a single-arch OCI image tarball with Trivy (gates on severity
 inputs:
   archive:       { required: true }
   severity:      { required: false, default: "CRITICAL" }
-  ignore_unfixed:{ required: false, default: "true" }
+  ignore_unfixed: { required: false, default: "true" }
 runs:
   using: "composite"
   steps:
