@@ -53,7 +53,7 @@ jobs:
   trigger:
     runs-on: federal
     steps:
-      - uses: SecurityUniversalOrg/platform-actions/actions/tenable-was-scan@v1
+      - uses: SecurityUniversalOrg/ghe-actions/actions/tenable-was-scan@v1
         with:
           tenable_access_key: ${{ inputs.tenable_access_key }}
           tenable_secret_key: ${{ inputs.tenable_secret_key }}
