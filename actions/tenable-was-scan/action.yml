@@ -62,7 +62,16 @@ runs:
         INPUT_WAIT_FOR_RESULTS: ${{ inputs.wait_for_results }}
       run: |
         set -euo pipefail
-        
+
+        # Create an isolated env in the runner workspace
+        python3 -m venv .venv
+        . .venv/bin/activate
+
+        # Ensure tooling is up-to-date inside the venv
+        python -m pip install --upgrade pip setuptools wheel
+
+        # Install action deps into the venv (NOT system Python)
         pip install -r requirements.txt
 
-        python3 ./src/main/main.py
+        # Run the action
+        python ./src/main/main.py
