@@ -51,15 +51,17 @@ on:
         default: 0
 jobs:
   trigger:
-    uses: SecurityUniversalOrg/platform-actions/actions/tenable-was-scan@v1
-    with:
-      tenable_access_key: ${{ inputs.tenable_access_key }}
-      tenable_secret_key: ${{ inputs.tenable_secret_key }}
-      folder_name: ${{ inputs.folder_name }}
-      scan_name: ${{ inputs.scan_name }}
-      check_thresholds: ${{ inputs.check_thresholds }}
-      wait_for_results: ${{ inputs.wait_for_results }}
-      low_vulns_threshold: ${{ inputs.low_vulns_threshold }}
-      medium_vulns_threshold: ${{ inputs.medium_vulns_threshold }}
-      high_vulns_threshold: ${{ inputs.high_vulns_threshold }}
-      critical_vulns_threshold: ${{ inputs.critical_vulns_threshold }}
+    runs-on: federal
+    steps:
+      - uses: SecurityUniversalOrg/platform-actions/actions/tenable-was-scan@v1
+        with:
+          tenable_access_key: ${{ inputs.tenable_access_key }}
+          tenable_secret_key: ${{ inputs.tenable_secret_key }}
+          folder_name: ${{ inputs.folder_name }}
+          scan_name: ${{ inputs.scan_name }}
+          check_thresholds: ${{ inputs.check_thresholds }}
+          wait_for_results: ${{ inputs.wait_for_results }}
+          low_vulns_threshold: ${{ inputs.low_vulns_threshold }}
+          medium_vulns_threshold: ${{ inputs.medium_vulns_threshold }}
+          high_vulns_threshold: ${{ inputs.high_vulns_threshold }}
+          critical_vulns_threshold: ${{ inputs.critical_vulns_threshold }}
