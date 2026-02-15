@@ -11,12 +11,13 @@ aws iam create-open-id-connect-provider \
 ### Example Output:
 ```bash
 {
-    "OpenIDConnectProviderArn": "arn:aws:iam::327784329945:oidc-provider/token.actions.githubusercontent.com"
+    "OpenIDConnectProviderArn": "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
 }
 ```
 
 ## Step 2 - Create IAM Role for GitHub
-Example: Terraform-Deploy-Dev
+#### Example: Terraform-Deploy-Dev
+Create `trust-policy.json`:
 ```json
 {
   "Version": "2012-10-17",
@@ -39,6 +40,18 @@ Example: Terraform-Deploy-Dev
   ]
 }
 ```
+#### Create the Role
+```bash
+aws iam create-role \
+  --role-name ${ROLE_NAME} \
+  --assume-role-policy-document file://trust-policy.json \
+  --description "GitHub OIDC Terraform deploy role (dev)"
+```
+#### Verify
+```bash
+aws iam get-role --role-name ${ROLE_NAME}
+```
+
 #### Important FedRAMP Hardening
 You SHOULD restrict:
 * Repository
@@ -53,26 +66,82 @@ repo:ORG/REPO:environment:tf-apply-prod
 ```
 
 ## Step 3 - Attach Least Privilege Policy
-Example for Terraform deploying network infra:
+#### Example for Terraform deploying network in
+Create `terraform-dev-policy.json`
+
+Example: EC2 + IAM PassRole minimal sample
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "EC2Permissions",
       "Effect": "Allow",
       "Action": [
-        "ec2:*",
-        "iam:PassRole"
+        "ec2:Describe*",
+        "ec2:CreateVpc",
+        "ec2:DeleteVpc",
+        "ec2:CreateSubnet",
+        "ec2:DeleteSubnet"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "AllowPassRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws-us-gov:iam::123456789012:role/SomeEC2InstanceRole"
     }
   ]
 }
 ```
-#### For FedRAMP:
+#### In Production:
+* Replace `*` with scoped ARNs
+* Separate networking, IAM, compute into different roles if possible
+
+### Create Policy in AWS
+```bash
+aws iam create-policy \
+  --policy-name Terraform-Deploy-Dev-Policy \
+  --policy-document file://terraform-dev-policy.json
+```
+Output will include:
+```json
+"Arn": "arn:aws-us-gov:iam::123456789012:policy/Terraform-Deploy-Dev-Policy"
+```
+#### Save this ARN
+
+### Attach Policy to Role
+```bash
+aws iam attach-role-policy \
+  --role-name ${ROLE_NAME} \
+  --policy-arn arn:aws-us-gov:iam::${ACCOUNT_ID}:policy/Terraform-Deploy-Dev-Policy
+```
+Verify:
+```bash
+aws iam list-attached-role-policies --role-name ${ROLE_NAME}
+```
+
+### For FedRAMP:
 * Scope to specific ARNs
 * Avoid *
 * Separate roles per environment
+
+##### Only allow assume role from specific GitHub environment:
+```ruby
+repo:ORG/REPO:environment:tf-apply-prod
+```
+
+##### Restrict to tags:
+```json
+"Condition": {
+  "StringEquals": {
+    "aws:RequestTag/Environment": "Dev"
+  }
+}
+```
+
+
 
 ## Step 4 - Store Variables in GitHub
 #### Go to:
