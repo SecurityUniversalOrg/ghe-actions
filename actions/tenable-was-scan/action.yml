@@ -63,6 +63,8 @@ runs:
       run: |
         set -euo pipefail
 
+        ACTION_DIR="${{ github.action_path }}"
+
         # Create an isolated env in the runner workspace
         python3 -m venv .venv
         . .venv/bin/activate
@@ -71,8 +73,7 @@ runs:
         python -m pip install --upgrade pip setuptools wheel
 
         # Install action deps into the venv (NOT system Python)
-        ls -lah
-        pip install -r requirements.txt
+        pip install -r "${ACTION_DIR}/requirements.txt"
 
         # Run the action
-        python ./src/main/main.py
+        python "${ACTION_DIR}/src/main/main.py"
