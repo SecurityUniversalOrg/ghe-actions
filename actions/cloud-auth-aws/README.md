@@ -140,8 +140,27 @@ repo:ORG/REPO:environment:tf-apply-prod
   }
 }
 ```
+### Test the Role (Simulate OIDC Assume)
+You can test with:
+```bash
+aws sts assume-role-with-web-identity \
+  --role-arn arn:${PARTITION}:iam::${ACCOUNT_ID}:role/${ROLE_NAME} \
+  --role-session-name test-session \
+  --web-identity-token file://token.jwt
+```
 
-
+### Recommended Production Pattern
+Create:
+```bash
+Terraform-Deploy-Dev
+Terraform-Deploy-Test
+Terraform-Deploy-Prod
+```
+Each with:
+* Separate trust policy
+* Separate permissions
+* Separate GitHub environment
+* Separate AWS account ideally
 
 ## Step 4 - Store Variables in GitHub
 #### Go to:
