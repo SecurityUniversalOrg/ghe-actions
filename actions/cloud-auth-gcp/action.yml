@@ -1,0 +1,23 @@
+name: cloud-auth-gcp
+description: "Authenticate to GCP using Workload Identity Federation (OIDC)"
+inputs:
+  workload_identity_provider:
+    required: true
+  service_account:
+    required: true
+  project_id:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Authenticate to Google Cloud (WIF)
+      uses: SecurityUniversalOrg/ghe-actions/actions/cloud-auth-configure-gcp@v1
+      with:
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.service_account }}
+
+    - name: Set up gcloud
+      uses: SecurityUniversalOrg/ghe-actions/actions/gcloud-setup@v1
+      with:
+        project_id: ${{ inputs.project_id }}
