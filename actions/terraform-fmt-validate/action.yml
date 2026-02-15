@@ -1,0 +1,29 @@
+name: terraform-fmt-validate
+description: "Terraform fmt + init (no backend) + validate"
+inputs:
+  tf_dir:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Terraform fmt (check)
+      shell: bash
+      working-directory: ${{ inputs.tf_dir }}
+      run: |
+        set -euo pipefail
+        terraform fmt -check -recursive
+
+    - name: Terraform init (no backend)
+      shell: bash
+      working-directory: ${{ inputs.tf_dir }}
+      run: |
+        set -euo pipefail
+        terraform init -backend=false
+
+    - name: Terraform validate
+      shell: bash
+      working-directory: ${{ inputs.tf_dir }}
+      run: |
+        set -euo pipefail
+        terraform validate

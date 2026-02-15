@@ -1,0 +1,85 @@
+name: terraform-plan
+description: "Terraform init + workspace + plan (binary + json) with optional lint/policy"
+inputs:
+  tf_dir:
+    required: true
+  workspace:
+    required: true
+  backend_config_file:
+    required: false
+    default: ""
+  var_file:
+    required: false
+    default: ""
+  run_tflint:
+    required: false
+    default: "true"
+  run_checkov:
+    required: false
+    default: "true"
+  checkov_soft_fail:
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Terraform init (with backend)
+      shell: bash
+      working-directory: ${{ inputs.tf_dir }}
+      run: |
+        set -euo pipefail
+        args=()
+        if [ -n "${{ inputs.backend_config_file }}" ]; then
+          args+=("-backend-config=${{ inputs.backend_config_file }}")
+        fi
+        terraform init "${args[@]}"
+
+    - name: Select/Create workspace
+      shell: bash
+      working-directory: ${{ inputs.tf_dir }}
+      run: |
+        set -euo pipefail
+        terraform workspace select "${{ inputs.workspace }}" || terraform workspace new "${{ inputs.workspace }}"
+
+    - name: Terraform plan (binary)
+      shell: bash
+      working-directory: ${{ inputs.tf_dir }}
+      run: |
+        set -euo pipefail
+        var_arg=()
+        if [ -n "${{ inputs.var_file }}" ]; then
+          var_arg+=("-var-file=${{ inputs.var_file }}")
+        fi
+        terraform plan -out=tfplan.binary "${var_arg[@]}"
+
+    - name: Terraform show (json evidence)
+      shell: bash
+      working-directory: ${{ inputs.tf_dir }}
+      run: |
+        set -euo pipefail
+        terraform show -json tfplan.binary > tfplan.json
+
+    - name: TFLint
+      if: ${{ inputs.run_tflint == 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.tf_dir }}
+      run: |
+        set -euo pipefail
+        # Expect tflint installed on the runner image (preferred for FedRAMP: controlled golden image).
+        tflint --init
+        tflint -f compact
+
+    - name: Checkov policy scan (plan JSON)
+      if: ${{ inputs.run_checkov == 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.tf_dir }}
+      run: |
+        set -euo pipefail
+        # Expect checkov installed on the runner image.
+        # --quiet reduces noise; adjust to your policy pack / baseline.
+        if [ "${{ inputs.checkov_soft_fail }}" = "true" ]; then
+          checkov -f tfplan.json --framework terraform_plan --quiet || true
+        else
+          checkov -f tfplan.json --framework terraform_plan --quiet
+        fi

@@ -1,0 +1,39 @@
+name: terraform-apply
+description: "Terraform apply using a previously generated plan file"
+inputs:
+  tf_dir:
+    required: true
+  workspace:
+    required: true
+  backend_config_file:
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Terraform init (with backend)
+      shell: bash
+      working-directory: ${{ inputs.tf_dir }}
+      run: |
+        set -euo pipefail
+        args=()
+        if [ -n "${{ inputs.backend_config_file }}" ]; then
+          args+=("-backend-config=${{ inputs.backend_config_file }}")
+        fi
+        terraform init "${args[@]}"
+
+    - name: Select workspace
+      shell: bash
+      working-directory: ${{ inputs.tf_dir }}
+      run: |
+        set -euo pipefail
+        terraform workspace select "${{ inputs.workspace }}"
+
+    - name: Terraform apply (saved plan)
+      shell: bash
+      working-directory: ${{ inputs.tf_dir }}
+      run: |
+        set -euo pipefail
+        test -f tfplan.binary
+        terraform apply -auto-approve tfplan.binary

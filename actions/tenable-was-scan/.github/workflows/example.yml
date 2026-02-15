@@ -2,14 +2,6 @@ name: Example Tenable WAS Scan Workflow
 on:
   workflow_dispatch: 
     inputs:
-      tenable_access_key:
-        description: "Tenable access key"
-        required: true
-        type: string
-      tenable_secret_key:
-        description: "Tenable secret key"
-        required: true
-        type: string
       folder_name:
         description: "Name of the folder in which the scan resides"
         required: false
@@ -55,8 +47,8 @@ jobs:
     steps:
       - uses: SecurityUniversalOrg/ghe-actions/actions/tenable-was-scan@v1
         with:
-          tenable_access_key: ${{ inputs.tenable_access_key }}
-          tenable_secret_key: ${{ inputs.tenable_secret_key }}
+          tenable_access_key: ${{ secrets.TENABLE_ACCESS_KEY }}
+          tenable_secret_key: ${{ secrets.TENABLE_SECRET_KEY }}
           folder_name: ${{ inputs.folder_name }}
           scan_name: ${{ inputs.scan_name }}
           check_thresholds: ${{ inputs.check_thresholds }}
