@@ -28,7 +28,7 @@ runs:
       working-directory: ${{ inputs.tf_dir }}
       run: |
         set -euo pipefail
-        terraform workspace select "${{ inputs.workspace }}"
+        terraform workspace select -or-create "${{ inputs.workspace }}"
 
     - name: Terraform apply (saved plan)
       shell: bash
