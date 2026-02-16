@@ -1,0 +1,31 @@
+name: "Wiz Docker Image Scan"
+description: "Conduct a Docker Image scan using Wiz CLI."
+
+branding:
+  icon: "tag"
+  color: "blue"
+
+inputs:
+  scan_path:
+    description: "Path to the Docker image to scan"
+  docker_tag:
+    description: "Docker image tag to scan"
+  scan_policy:
+    description: "The Wiz scan policy to use for the Docker scan"
+  wiz_client_id:
+    description: "Wiz client ID for authentication"
+  wiz_client_secret:
+    description: "Wiz client secret for authentication"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run Wiz Docker Scan
+      shell: bash
+      env:
+        WIZ_CLIENT_ID: ${{ inputs.wiz_client_id }}
+        WIZ_CLIENT_SECRET: ${{ inputs.wiz_client_secret }}
+      run: |
+        set -euo pipefail
+
+        ./wizcli scan container-image ${{ inputs.docker_tag }} --policies ${{ inputs.scan_policy }} --sarif-output-file ./sarif-output.sarif --human-output-file ./human-output.txt

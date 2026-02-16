@@ -1,0 +1,30 @@
+name: "Wiz IaC Scan"
+description: "Conduct an Infrastructure-as-Code scan using Wiz CLI."
+
+branding:
+  icon: "tag"
+  color: "blue"
+
+inputs:
+  scan_path:
+    description: "Path to the IaC files to scan"
+  scan_policy:
+    description: "The Wiz scan policy to use for the IaC scan"
+  wiz_client_id:
+    description: "Wiz client ID for authentication"
+  wiz_client_secret:
+    description: "Wiz client secret for authentication"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run Wiz IaC Scan
+      shell: bash
+      env:
+        WIZ_CLIENT_ID: ${{ inputs.wiz_client_id }}
+        WIZ_CLIENT_SECRET: ${{ inputs.wiz_client_secret }}
+      run: |
+        set -euo pipefail
+
+        ./wizcli scan dir ${{ inputs.scan_path }} --policies ${{ inputs.scan_policy }} --sarif-output-file ./sarif-output.sarif --human-output-file ./human-output.txt
+        
