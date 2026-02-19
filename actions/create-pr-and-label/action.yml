@@ -1,0 +1,76 @@
+name: "Create PR and Label"
+description: "Create a PR via API and apply a label for dedupe"
+
+inputs:
+  repo:
+    description: "owner/repo (destination)"
+    required: true
+  token:
+    description: "PAT with pull request + issues write permissions"
+    required: true
+  api_url:
+    description: "GitHub API base URL"
+    required: false
+    default: "https://api.github.com"
+  title:
+    description: "PR title"
+    required: true
+  head:
+    description: "Head branch name"
+    required: true
+  base:
+    description: "Base branch name"
+    required: true
+  body:
+    description: "PR body"
+    required: true
+  label:
+    description: "Label to add to the PR issue"
+    required: true
+
+outputs:
+  pr_number:
+    description: "Created PR number"
+    value: ${{ steps.pr.outputs.pr_number }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Create PR
+      id: pr
+      shell: bash
+      run: |
+        set -euo pipefail
+        PR_RESPONSE="$(curl -sS -X POST \
+          -H "Authorization: token ${{ inputs.token }}" \
+          -H "Accept: application/vnd.github+json" \
+          "${{ inputs.api_url }}/repos/${{ inputs.repo }}/pulls" \
+          -d @- <<EOF
+        {
+          "title": "${{ inputs.title }}",
+          "head": "${{ inputs.head }}",
+          "base": "${{ inputs.base }}",
+          "body": "${{ inputs.body }}"
+        }
+        EOF
+        )"
+
+        echo "PR response: $PR_RESPONSE"
+        PR_NUMBER="$(echo "$PR_RESPONSE" | jq -r .number)"
+
+        if [[ -z "$PR_NUMBER" || "$PR_NUMBER" == "null" ]]; then
+          echo "Failed to create PR."
+          exit 1
+        fi
+
+        echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+    - name: Add label to PR
+      shell: bash
+      run: |
+        set -euo pipefail
+        curl -sS -X POST \
+          -H "Authorization: token ${{ inputs.token }}" \
+          -H "Accept: application/vnd.github+json" \
+          "${{ inputs.api_url }}/repos/${{ inputs.repo }}/issues/${{ steps.pr.outputs.pr_number }}/labels" \
+          -d "$(jq -n --arg label "${{ inputs.label }}" '[ $label ]')"

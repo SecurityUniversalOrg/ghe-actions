@@ -1,0 +1,74 @@
+name: "Check Sync Needed"
+description: "Decide if sync is needed by comparing last synced SHA and checking for open PRs with a label"
+
+inputs:
+  ghes_repo:
+    description: "Destination repo (owner/repo)"
+    required: true
+  latest_sha:
+    description: "Latest SHA from source"
+    required: true
+  token:
+    description: "Token (PAT) with access to GHES destination repo"
+    required: true
+  api_url:
+    description: "GitHub API base URL"
+    required: false
+    default: "https://api.github.com"
+  last_synced_file:
+    description: "Path to file containing last synced SHA"
+    required: false
+    default: ".last_synced_sha"
+
+outputs:
+  sync_needed:
+    description: "true/false"
+    value: ${{ steps.out.outputs.sync_needed }}
+  sync_label:
+    description: "Label used for dedupe"
+    value: ${{ steps.out.outputs.sync_label }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check sync state and open PR labels
+      id: out
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        LATEST_SHA="${{ inputs.latest_sha }}"
+        LAST_SYNCED_SHA="$(cat "${{ inputs.last_synced_file }}" 2>/dev/null || echo "none")"
+
+        echo "Last synced SHA: $LAST_SYNCED_SHA"
+        echo "Latest source SHA: $LATEST_SHA"
+
+        SYNC_NEEDED=true
+
+        if [[ "$LAST_SYNCED_SHA" == "$LATEST_SHA" ]]; then
+          echo "SHA already synced."
+          SYNC_NEEDED=false
+        else
+          LABEL="source-sha-${LATEST_SHA:0:7}"
+          echo "Checking for open issues/PRs with label: $LABEL"
+
+          PRS="$(curl -sS -H "Authorization: token ${{ inputs.token }}" \
+            "${{ inputs.api_url }}/repos/${{ inputs.ghes_repo }}/issues?state=open")"
+
+          if echo "$PRS" | jq -e --arg label "$LABEL" \
+            'map(select(.labels? | map(.name) | index($label))) | length > 0' > /dev/null; then
+            echo "A PR with label $LABEL already exists. Skipping sync."
+            SYNC_NEEDED=false
+          else
+            echo "No matching PR label found. Proceeding with sync."
+          fi
+
+          echo "sync_label=$LABEL" >> "$GITHUB_OUTPUT"
+        fi
+
+        # Ensure sync_label is always set (even when SHA already synced)
+        if ! grep -q '^sync_label=' "$GITHUB_OUTPUT"; then
+          echo "sync_label=source-sha-${LATEST_SHA:0:7}" >> "$GITHUB_OUTPUT"
+        fi
+
+        echo "sync_needed=$SYNC_NEEDED" >> "$GITHUB_OUTPUT"

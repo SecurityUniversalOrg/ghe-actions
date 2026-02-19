@@ -1,0 +1,24 @@
+name: "Prepare Workspace"
+description: "Ensure clean directories before cloning repos"
+
+inputs:
+  ghes_dir:
+    description: "Directory for GHES clone"
+    required: true
+  ghec_dir:
+    description: "Directory for GHEC clone"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Clean workspace directories
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ -d "${{ inputs.ghes_dir }}" ]]; then
+          rm -rf "${{ inputs.ghes_dir }}"
+        fi
+        if [[ -d "${{ inputs.ghec_dir }}" ]]; then
+          rm -rf "${{ inputs.ghec_dir }}"
+        fi

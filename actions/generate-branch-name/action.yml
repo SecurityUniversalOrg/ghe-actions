@@ -1,0 +1,24 @@
+name: "Generate Branch Name"
+description: "Generate a unique branch name based on a base branch and timestamp"
+
+inputs:
+  base_branch:
+    description: "Base branch name (e.g., main)"
+    required: true
+
+outputs:
+  branch_name:
+    description: "Generated branch name"
+    value: ${{ steps.gen.outputs.branch_name }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Generate timestamped branch name
+      id: gen
+      shell: bash
+      run: |
+        set -euo pipefail
+        UNIQUE_ID="$(date +%Y%m%d%H%M%S)"
+        BRANCH_NAME="${{ inputs.base_branch }}-$UNIQUE_ID"
+        echo "branch_name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"

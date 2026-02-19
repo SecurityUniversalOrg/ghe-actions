@@ -1,0 +1,31 @@
+name: "Clone GHES Destination"
+description: "Clone destination repo and create a new branch"
+
+inputs:
+  repo:
+    description: "owner/repo"
+    required: true
+  token:
+    description: "PAT for destination repo"
+    required: true
+  dest_dir:
+    description: "Directory to clone into"
+    required: true
+  branch_name:
+    description: "New branch to create"
+    required: true
+  git_host:
+    description: "Git host base (e.g., github.com or ghes.mycorp)"
+    required: false
+    default: "github.com"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Clone and create branch
+      shell: bash
+      run: |
+        set -euo pipefail
+        git clone "https://x-access-token:${{ inputs.token }}@${{ inputs.git_host }}/${{ inputs.repo }}" "${{ inputs.dest_dir }}"
+        cd "${{ inputs.dest_dir }}"
+        git checkout -b "${{ inputs.branch_name }}"

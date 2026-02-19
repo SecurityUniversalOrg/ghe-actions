@@ -1,0 +1,20 @@
+name: "Setup Git Config"
+description: "Configure global git user.name and user.email for automated commits"
+
+inputs:
+  user_name:
+    description: "Git user.name"
+    required: true
+  user_email:
+    description: "Git user.email"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Configure git identity
+      shell: bash
+      run: |
+        set -euo pipefail
+        git config --global user.name "${{ inputs.user_name }}"
+        git config --global user.email "${{ inputs.user_email }}"

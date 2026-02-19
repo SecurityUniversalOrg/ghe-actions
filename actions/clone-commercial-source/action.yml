@@ -1,0 +1,31 @@
+name: "Clone GHEC (Commercial) Source"
+description: "Shallow clone source repo at a branch"
+
+inputs:
+  repo:
+    description: "owner/repo"
+    required: true
+  token:
+    description: "PAT for source repo"
+    required: true
+  branch:
+    description: "Branch to clone"
+    required: true
+  dest_dir:
+    description: "Directory to clone into"
+    required: true
+  git_host:
+    description: "Git host base (e.g., github.com)"
+    required: false
+    default: "github.com"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Shallow clone source repo
+      shell: bash
+      run: |
+        set -euo pipefail
+        git clone --depth 1 --branch "${{ inputs.branch }}" \
+          "https://x-access-token:${{ inputs.token }}@${{ inputs.git_host }}/${{ inputs.repo }}" \
+          "${{ inputs.dest_dir }}"

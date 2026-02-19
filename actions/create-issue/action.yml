@@ -1,0 +1,40 @@
+name: "Create Issue"
+description: "Create an issue in a repo via GitHub API"
+
+inputs:
+  repo:
+    description: "owner/repo"
+    required: true
+  token:
+    description: "PAT with issues:write"
+    required: true
+  api_url:
+    description: "GitHub API base URL"
+    required: false
+    default: "https://api.github.com"
+  title:
+    description: "Issue title"
+    required: true
+  body:
+    description: "Issue body"
+    required: true
+  labels_json:
+    description: "JSON array string of labels, e.g. [\"a\",\"b\"]"
+    required: false
+    default: "[]"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Create issue
+      shell: bash
+      run: |
+        set -euo pipefail
+        curl -sS -X POST "${{ inputs.api_url }}/repos/${{ inputs.repo }}/issues" \
+          -H "Authorization: token ${{ inputs.token }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          -d "$(jq -n \
+            --arg title "${{ inputs.title }}" \
+            --arg body "${{ inputs.body }}" \
+            --argjson labels '${{ inputs.labels_json }}' \
+            '{title: $title, body: $body, labels: $labels}')"

@@ -1,0 +1,40 @@
+name: "Get Latest Commit SHA"
+description: "Fetch latest commit SHA for a repo+branch using GitHub REST API"
+
+inputs:
+  repo:
+    description: "owner/repo"
+    required: true
+  branch:
+    description: "branch name"
+    required: true
+  token:
+    description: "GitHub token (PAT) with repo read access"
+    required: true
+  api_url:
+    description: "GitHub API base URL"
+    required: false
+    default: "https://api.github.com"
+
+outputs:
+  latest_sha:
+    description: "Latest commit SHA"
+    value: ${{ steps.sha.outputs.latest_sha }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Fetch latest SHA
+      id: sha
+      shell: bash
+      run: |
+        set -euo pipefail
+        RESP="$(curl -sS -H "Authorization: token ${{ inputs.token }}" \
+          "${{ inputs.api_url }}/repos/${{ inputs.repo }}/commits/${{ inputs.branch }}")"
+        LATEST_SHA="$(echo "$RESP" | jq -r .sha)"
+        if [[ -z "$LATEST_SHA" || "$LATEST_SHA" == "null" ]]; then
+          echo "Failed to read SHA. Response was:"
+          echo "$RESP"
+          exit 1
+        fi
+        echo "latest_sha=$LATEST_SHA" >> "$GITHUB_OUTPUT"
