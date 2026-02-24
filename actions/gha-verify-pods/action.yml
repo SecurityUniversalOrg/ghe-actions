@@ -1,0 +1,23 @@
+name: "Verify Pods"
+description: "Show pods for controller and scaleset namespaces"
+inputs:
+  controller_namespace:
+    required: true
+  scaleset_namespace:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Verify pods
+      shell: bash
+      run: |
+        set -euo pipefail
+        : "${KUBECONFIG:?KUBECONFIG not set}"
+
+        echo "ARC Controller pods (ns=${{ inputs.controller_namespace }}):"
+        kubectl -n "${{ inputs.controller_namespace }}" get pods -o wide || true
+        echo
+
+        echo "ARC Scale Set pods (ns=${{ inputs.scaleset_namespace }}):"
+        kubectl -n "${{ inputs.scaleset_namespace }}" get pods -o wide || true

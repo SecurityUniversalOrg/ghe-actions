@@ -1,0 +1,34 @@
+name: "Deploy ARC Scale Set (Orchestrator)"
+description: "Write CA cert, ensure namespace/configmap, then helm deploy a scale set"
+inputs:
+  installation_name:
+    required: true
+  namespace:
+    required: true
+  github_config_url:
+    required: true
+  cm_name:
+    required: true
+  runner_image:
+    required: true
+  chart_path:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - uses: ./.github/actions/write-ghes-ca-cert
+
+    - uses: ./.github/actions/ensure-namespace-and-ca-configmap
+      with:
+        namespace: ${{ inputs.namespace }}
+        cm_name: ${{ inputs.cm_name }}
+
+    - uses: ./.github/actions/helm-deploy-arc-scaleset
+      with:
+        installation_name: ${{ inputs.installation_name }}
+        namespace: ${{ inputs.namespace }}
+        github_config_url: ${{ inputs.github_config_url }}
+        cm_name: ${{ inputs.cm_name }}
+        runner_image: ${{ inputs.runner_image }}
+        chart_path: ${{ inputs.chart_path }}

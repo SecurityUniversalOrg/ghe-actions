@@ -1,0 +1,38 @@
+name: "Helm deploy ARC scale set"
+description: "helm upgrade --install for a single ARC runner scale set"
+inputs:
+  installation_name:
+    required: true
+  namespace:
+    required: true
+  github_config_url:
+    required: true
+  cm_name:
+    required: true
+  runner_image:
+    required: true
+  chart_path:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Deploy scaleset
+      shell: bash
+      run: |
+        set -euo pipefail
+        : "${KUBECONFIG:?KUBECONFIG not set}"
+        : "${GITHUB_PAT:?Missing GITHUB_PAT env var (secret)}"
+
+        helm upgrade --install "${{ inputs.installation_name }}" \
+          "${{ inputs.chart_path }}" \
+          --namespace "${{ inputs.namespace }}" \
+          --create-namespace \
+          --set githubConfigUrl="${{ inputs.github_config_url }}" \
+          --set-string githubConfigSecret.github_token="${GITHUB_PAT}" \
+          --set githubServerTLS.certificateFrom.configMapKeyRef.name="${{ inputs.cm_name }}" \
+          --set githubServerTLS.certificateFrom.configMapKeyRef.key="ca.crt" \
+          --set githubServerTLS.runnerMountPath="/usr/local/share/ca-certificates/" \
+          --set template.spec.containers[0].name="runner" \
+          --set template.spec.containers[0].image="${{ inputs.runner_image }}" \
+          --set template.spec.containers[0].command[0]="/home/runner/run.sh"

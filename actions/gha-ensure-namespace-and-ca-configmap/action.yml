@@ -1,0 +1,23 @@
+name: "Ensure namespace & CA configmap"
+description: "Create namespace (idempotent) and apply CA configmap from CA_PATH"
+inputs:
+  namespace:
+    required: true
+  cm_name:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Create namespace & CA configmap
+      shell: bash
+      run: |
+        set -euo pipefail
+        : "${KUBECONFIG:?KUBECONFIG not set}"
+        : "${CA_PATH:?CA_PATH not set (run write-ghes-ca-cert first)}"
+
+        kubectl create namespace "${{ inputs.namespace }}" --dry-run=client -o yaml | kubectl apply -f -
+
+        kubectl -n "${{ inputs.namespace }}" create configmap "${{ inputs.cm_name }}" \
+          --from-file=ca.crt="${CA_PATH}" \
+          --dry-run=client -o yaml | kubectl apply -f -

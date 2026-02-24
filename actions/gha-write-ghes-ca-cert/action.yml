@@ -1,0 +1,14 @@
+name: "Write GHES CA cert"
+description: "Write GHES CA cert PEM (secret) to a temp file and export CA_PATH"
+runs:
+  using: "composite"
+  steps:
+    - name: Write CA cert to file
+      shell: bash
+      run: |
+        set -euo pipefail
+        : "${GHES_CA_CERT_PEM:?Missing GHES_CA_CERT_PEM env var (secret)}"
+        CA_PATH="${RUNNER_TEMP}/ghes-ca.crt"
+        printf '%s\n' "$GHES_CA_CERT_PEM" > "$CA_PATH"
+        echo "CA_PATH=$CA_PATH" >> "$GITHUB_ENV"
+        test -s "$CA_PATH"

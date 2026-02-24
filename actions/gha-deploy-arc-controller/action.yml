@@ -1,0 +1,23 @@
+name: "Deploy ARC Controller"
+description: "helm upgrade --install for ARC controller"
+inputs:
+  namespace:
+    required: true
+  chart_path:
+    required: true
+  values_file:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Deploy controller
+      shell: bash
+      run: |
+        set -euo pipefail
+        : "${KUBECONFIG:?KUBECONFIG not set}"
+        helm upgrade --install arc \
+          "${{ inputs.chart_path }}" \
+          --namespace "${{ inputs.namespace }}" \
+          --create-namespace \
+          -f "${{ inputs.values_file }}"

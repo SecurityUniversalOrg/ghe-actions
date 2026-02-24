@@ -1,0 +1,11 @@
+name: "Install Helm"
+description: "Install Helm v3"
+runs:
+  using: "composite"
+  steps:
+    - name: Install helm
+      shell: bash
+      run: |
+        set -euo pipefail
+        curl -sSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+        helm version
