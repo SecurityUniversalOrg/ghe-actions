@@ -1,0 +1,23 @@
+name: "Get EKS kubeconfig"
+description: "Fetch EKS kubeconfig and export KUBECONFIG"
+inputs:
+  cluster_name:
+    required: true
+  aws_region:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Get EKS kubeconfig
+      shell: bash
+      run: |
+        set -euo pipefail
+        KCFG="${GITHUB_WORKSPACE}/kubeconfig"
+        aws eks update-kubeconfig \
+          --name "${{ inputs.cluster_name }}" \
+          --region "${{ inputs.aws_region }}" \
+          --kubeconfig "$KCFG"
+
+        echo "KUBECONFIG=$KCFG" >> "$GITHUB_ENV"
+        KUBECONFIG="$KCFG" kubectl cluster-info

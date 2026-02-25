@@ -17,14 +17,14 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - uses: ./.github/actions/write-ghes-ca-cert
+    - uses: SecurityUniversalOrg/ghe-actions/actions/gha-write-ghes-ca-cert@v1
 
-    - uses: ./.github/actions/ensure-namespace-and-ca-configmap
+    - uses: SecurityUniversalOrg/ghe-actions/actions/gha-ensure-namespace-and-ca-configmap@v1
       with:
         namespace: ${{ inputs.namespace }}
         cm_name: ${{ inputs.cm_name }}
 
-    - uses: ./.github/actions/helm-deploy-arc-scaleset
+    - uses: SecurityUniversalOrg/ghe-actions/actions/gha-helm-deploy-arc-scaleset@v1
       with:
         installation_name: ${{ inputs.installation_name }}
         namespace: ${{ inputs.namespace }}

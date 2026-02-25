@@ -14,17 +14,17 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - uses: ./.github/actions/install-kubectl
-    - uses: ./.github/actions/install-helm
+    - uses: SecurityUniversalOrg/ghe-actions/actions/k8-install-kubectl@v1
+    - uses: SecurityUniversalOrg/ghe-actions/actions/helm-install-helm@v1
 
     # Azure
     - name: Azure login
       if: ${{ inputs.cloud == 'azure' }}
-      uses: ./.github/actions/azure-login-oidc
+      uses: SecurityUniversalOrg/ghe-actions/actions/cloud-auth-azure@v1
 
     - name: AKS kubeconfig
       if: ${{ inputs.cloud == 'azure' }}
-      uses: ./.github/actions/aks-get-kubeconfig
+      uses: SecurityUniversalOrg/ghe-actions/actions/k8-aks-get-kubeconfig@v1
       with:
         cluster_name: ${{ inputs.cluster_name }}
         cluster_resource_group: ${{ inputs.cluster_resource_group }}
@@ -33,13 +33,13 @@ runs:
     # AWS
     - name: AWS configure creds
       if: ${{ inputs.cloud == 'aws' }}
-      uses: ./.github/actions/aws-configure-oidc
+      uses: SecurityUniversalOrg/ghe-actions/actions/cloud-auth-aws@v1
       with:
         aws_region: ${{ inputs.aws_region }}
 
     - name: EKS kubeconfig
       if: ${{ inputs.cloud == 'aws' }}
-      uses: ./.github/actions/eks-get-kubeconfig
+      uses: SecurityUniversalOrg/ghe-actions/actions/k8-eks-get-kubeconfig@v1
       with:
         cluster_name: ${{ inputs.cluster_name }}
         aws_region: ${{ inputs.aws_region }}
