@@ -41,25 +41,48 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        PR_RESPONSE="$(curl -sS -X POST \
-          -H "Authorization: token ${{ inputs.token }}" \
-          -H "Accept: application/vnd.github+json" \
-          "${{ inputs.api_url }}/repos/${{ inputs.repo }}/pulls" \
-          -d @- <<EOF
-        {
-          "title": "${{ inputs.title }}",
-          "head": "${{ inputs.head }}",
-          "base": "${{ inputs.base }}",
-          "body": "${{ inputs.body }}"
-        }
-        EOF
+
+        PAYLOAD="$(jq -n \
+          --arg title "${{ inputs.title }}" \
+          --arg head  "${{ inputs.head }}" \
+          --arg base  "${{ inputs.base }}" \
+          --arg body  "${{ inputs.body }}" \
+          '{title:$title, head:$head, base:$base, body:$body}')"
+
+        echo "Create PR URL: ${{ inputs.api_url }}/repos/${{ inputs.repo }}/pulls"
+        echo "Payload (sanitized):"
+        echo "$PAYLOAD" | jq .
+
+        BODY_FILE="$(mktemp)"
+        ERR_FILE="$(mktemp)"
+
+        # IMPORTANT: --fail-with-body makes curl exit nonzero on 4xx/5xx but still keeps the JSON body
+        HTTP_CODE="$(
+          curl -sS --fail-with-body \
+            -o "$BODY_FILE" \
+            -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: token ${{ inputs.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            "${{ inputs.api_url }}/repos/${{ inputs.repo }}/pulls" \
+            -d "$PAYLOAD" \
+            2>"$ERR_FILE" || true
         )"
 
-        echo "PR response: $PR_RESPONSE"
-        PR_NUMBER="$(echo "$PR_RESPONSE" | jq -r .number)"
+        echo "HTTP code: ${HTTP_CODE:-<none>}"
 
-        if [[ -z "$PR_NUMBER" || "$PR_NUMBER" == "null" ]]; then
-          echo "Failed to create PR."
+        echo "curl stderr (if any):"
+        cat "$ERR_FILE" || true
+
+        echo "Response body:"
+        cat "$BODY_FILE" || true
+        echo
+
+        PR_NUMBER="$(jq -r '.number // empty' < "$BODY_FILE" || true)"
+
+        if [[ -z "$PR_NUMBER" ]]; then
+          echo "Failed to create PR (no .number in response)."
           exit 1
         fi
 
