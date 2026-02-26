@@ -3,16 +3,23 @@ description: "Copy from source dir into destination dir, record SHA, commit and 
 
 inputs:
   source_dir:
-    description: "Directory with source files"
     required: true
   dest_dir:
-    description: "Directory of destination repo clone"
     required: true
   latest_sha:
-    description: "SHA to record"
     required: true
   branch_name:
-    description: "Branch to push"
+    required: true
+
+  # NEW:
+  repo:
+    description: "Destination repo owner/repo"
+    required: true
+  token:
+    description: "PAT with write access to destination repo"
+    required: true
+  git_host:
+    description: "GHES host (e.g. github.azg.corp.intranet)"
     required: true
 
 runs:
@@ -25,7 +32,16 @@ runs:
 
         cd "${{ inputs.dest_dir }}"
 
-        # Copy contents (including dotfiles) safely
+        echo "Remote before:"
+        git remote -v
+
+        # Force HTTPS+PAT for origin (avoids SSH / wrong host / missing creds)
+        git remote set-url origin "https://x-access-token:${{ inputs.token }}@${{ inputs.git_host }}/${{ inputs.repo }}"
+
+        echo "Remote after:"
+        git remote -v
+
+        # Copy contents (including dotfiles)
         shopt -s dotglob
         cp -R "../${{ inputs.source_dir }}/"* .
         shopt -u dotglob
