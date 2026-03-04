@@ -9,8 +9,7 @@ runs:
         echo "=== Build Environment ==="
         sudo kiwi-ng --version
         qemu-img --version | head -1
-        aws --version || true
-        az version --output tsv 2>/dev/null | head -1 || true
+        # aws and az cli are installed in the base image layers
         gcloud version --format='value(version)' 2>/dev/null || true
         echo ""
         echo "=== Disk Space ==="
