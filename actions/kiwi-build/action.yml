@@ -1,0 +1,39 @@
+name: "Kiwi Build"
+description: "Run kiwi build scripts for EL9 or Ubuntu24"
+inputs:
+  distro: { required: true }   # el9 | ubuntu24
+  os: { required: true }       # rocky|rhel|oel|ubuntu24
+  cloud: { required: true }    # EC2|AZURE|GCE|ALL
+  prod_flag: { required: false, default: "true" }
+
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+
+        CLOUD="${{ inputs.cloud }}"
+        PROD="${{ inputs.prod_flag }}"
+
+        if [ "${{ inputs.distro }}" = "el9" ]; then
+          cd kiwi/el/9
+          if [ "$PROD" = "true" ]; then
+            sudo -E ./build.sh --cloud "$CLOUD" --os "${{ inputs.os }}" -prod
+          else
+            sudo -E ./build.sh --cloud "$CLOUD" --os "${{ inputs.os }}"
+          fi
+        elif [ "${{ inputs.distro }}" = "ubuntu24" ]; then
+          cd kiwi/ubuntu/24
+          if [ "$PROD" = "true" ]; then
+            sudo -E ./build.sh --cloud "$CLOUD" --prod
+          else
+            sudo -E ./build.sh --cloud "$CLOUD"
+          fi
+        else
+          echo "Unsupported distro: ${{ inputs.distro }}" >&2
+          exit 2
+        fi
+      env:
+        GITHUB_ACTIONS: "true"
+        AZURE_CONFIG_DIR: /tmp/azure-config

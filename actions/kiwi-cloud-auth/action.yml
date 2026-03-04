@@ -1,0 +1,49 @@
+name: "Kiwi Cloud Auth (OIDC)"
+description: "Authenticate to AWS/Azure/GCP using OIDC / workload identity"
+inputs:
+  cloud: { required: true }
+
+  aws_region: { required: false, default: "" }
+  aws_role_to_assume: { required: false, default: "" }
+
+  azure_client_id: { required: false, default: "" }
+  azure_tenant_id: { required: false, default: "" }
+  azure_subscription_id: { required: false, default: "" }
+
+  gcp_project_id: { required: false, default: "" }
+  gcp_workload_identity_provider: { required: false, default: "" }
+  gcp_service_account: { required: false, default: "" }
+
+runs:
+  using: "composite"
+  steps:
+    - name: AWS (OIDC)
+      if: ${{ inputs.cloud == 'EC2' || inputs.cloud == 'ALL' }}
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws_role_to_assume }}
+        aws-region: ${{ inputs.aws_region }}
+
+    - name: Azure (OIDC)
+      if: ${{ inputs.cloud == 'AZURE' || inputs.cloud == 'ALL' }}
+      uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.azure_client_id }}
+        tenant-id: ${{ inputs.azure_tenant_id }}
+        subscription-id: ${{ inputs.azure_subscription_id }}
+      env:
+        AZURE_CONFIG_DIR: /tmp/azure-config
+
+    - name: GCP (Workload Identity Federation)
+      if: ${{ inputs.cloud == 'GCE' || inputs.cloud == 'ALL' }}
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ inputs.gcp_workload_identity_provider }}
+        service_account: ${{ inputs.gcp_service_account }}
+
+    - name: GCP set project
+      if: ${{ inputs.cloud == 'GCE' || inputs.cloud == 'ALL' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        gcloud config set project "${{ inputs.gcp_project_id }}"

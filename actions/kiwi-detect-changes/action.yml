@@ -1,0 +1,139 @@
+name: "Kiwi Detect Changes"
+description: "Detect changed paths and decide what to build"
+inputs:
+  event_name: { required: true }
+  distribution: { required: false, default: "" }
+  cloud: { required: false, default: "" }
+  el_os: { required: false, default: "" }
+  before: { required: false, default: "" }
+  sha: { required: true }
+
+outputs:
+  rocky_changed:
+    value: ${{ steps.out.outputs.rocky_changed }}
+  rhel_changed:
+    value: ${{ steps.out.outputs.rhel_changed }}
+  oel_changed:
+    value: ${{ steps.out.outputs.oel_changed }}
+  el_common_changed:
+    value: ${{ steps.out.outputs.el_common_changed }}
+  ubuntu_changed:
+    value: ${{ steps.out.outputs.ubuntu_changed }}
+
+  build_el:
+    value: ${{ steps.out.outputs.build_el }}
+  build_ubuntu:
+    value: ${{ steps.out.outputs.build_ubuntu }}
+
+  cloud_name:
+    value: ${{ steps.out.outputs.cloud_name }}
+  cloud:
+    value: ${{ steps.out.outputs.cloud }}
+  el_os:
+    value: ${{ steps.out.outputs.el_os }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: out
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        EVENT="${{ inputs.event_name }}"
+        DIST="${{ inputs.distribution }}"
+        CLOUD_IN="${{ inputs.cloud }}"
+        EL_OS_IN="${{ inputs.el_os }}"
+
+        # Normalize cloud selection
+        CLOUD="${CLOUD_IN:-ALL}"
+        case "$CLOUD" in
+          EC2|AZURE|GCE|ALL) ;;
+          "") CLOUD="ALL" ;;
+          *) echo "Unsupported cloud input: $CLOUD" >&2; exit 2 ;;
+        esac
+
+        CLOUD_NAME="aws"
+        case "$CLOUD" in
+          EC2) CLOUD_NAME="aws" ;;
+          AZURE) CLOUD_NAME="azure" ;;
+          GCE) CLOUD_NAME="gcp" ;;
+          ALL) CLOUD_NAME="all" ;;
+        esac
+
+        echo "cloud=$CLOUD" >> "$GITHUB_OUTPUT"
+        echo "cloud_name=$CLOUD_NAME" >> "$GITHUB_OUTPUT"
+
+        EL_OS="${EL_OS_IN:-ALL}"
+        case "$EL_OS" in
+          rocky|rhel|oel|ALL) ;;
+          "") EL_OS="ALL" ;;
+          *) echo "Unsupported el-os input: $EL_OS" >&2; exit 2 ;;
+        esac
+        echo "el_os=$EL_OS" >> "$GITHUB_OUTPUT"
+
+        # Defaults
+        rocky=false; rhel=false; oel=false; el_common=false; ubuntu=false
+
+        if [ "$EVENT" = "workflow_dispatch" ]; then
+          # For manual dispatch, decide based on inputs
+          if [ "$DIST" = "el9" ] || [ "$DIST" = "ALL" ] || [ -z "$DIST" ]; then
+            echo "build_el=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_el=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "$DIST" = "ubuntu24" ] || [ "$DIST" = "ALL" ]; then
+            echo "build_ubuntu=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_ubuntu=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Mark “changed” truthy for selected OS so matrix can run the right items
+          if [ "$EL_OS" = "rocky" ] || [ "$EL_OS" = "ALL" ]; then rocky=true; fi
+          if [ "$EL_OS" = "rhel" ]  || [ "$EL_OS" = "ALL" ]; then rhel=true; fi
+          if [ "$EL_OS" = "oel" ]   || [ "$EL_OS" = "ALL" ]; then oel=true; fi
+          if [ "$DIST" = "ubuntu24" ] || [ "$DIST" = "ALL" ]; then ubuntu=true; fi
+        else
+          # Push-based change detection
+          BEFORE="${{ inputs.before }}"
+          SHA="${{ inputs.sha }}"
+
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            # Fallback for first push / edge cases
+            CHANGED_FILES="$(git diff --name-only HEAD~1..HEAD || true)"
+          else
+            CHANGED_FILES="$(git diff --name-only "$BEFORE" "$SHA" || true)"
+          fi
+
+          echo "Changed files:"
+          printf '%s\n' "$CHANGED_FILES"
+
+          if printf '%s\n' "$CHANGED_FILES" | grep -qE '^kiwi/el/9/.*/rocky/|^kiwi/el/9/rocky|^kiwi/el/9/repositories/rocky\.xml'; then rocky=true; fi
+          if printf '%s\n' "$CHANGED_FILES" | grep -qE '^kiwi/el/9/.*/rhel/|^kiwi/el/9/rhel|^kiwi/el/9/repositories/rhel\.xml'; then rhel=true; fi
+          if printf '%s\n' "$CHANGED_FILES" | grep -qE '^kiwi/el/9/.*/oel/|^kiwi/el/9/oel|^kiwi/el/9/repositories/oel\.xml'; then oel=true; fi
+
+          if printf '%s\n' "$CHANGED_FILES" | grep -qE '^kiwi/el/9/|^kiwi/el/common|^kiwi/shared/' | grep -vqE 'rocky/|rhel/|oel/'; then
+            el_common=true
+          fi
+
+          if printf '%s\n' "$CHANGED_FILES" | grep -qE '^kiwi/ubuntu/24|^kiwi/ubuntu/common|^kiwi/shared/'; then ubuntu=true; fi
+
+          # Decide builds
+          if [ "$rocky" = true ] || [ "$rhel" = true ] || [ "$oel" = true ] || [ "$el_common" = true ]; then
+            echo "build_el=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_el=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$ubuntu" = true ]; then
+            echo "build_ubuntu=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_ubuntu=false" >> "$GITHUB_OUTPUT"
+          fi
+        fi
+
+        echo "rocky_changed=$rocky" >> "$GITHUB_OUTPUT"
+        echo "rhel_changed=$rhel" >> "$GITHUB_OUTPUT"
+        echo "oel_changed=$oel" >> "$GITHUB_OUTPUT"
+        echo "el_common_changed=$el_common" >> "$GITHUB_OUTPUT"
+        echo "ubuntu_changed=$ubuntu" >> "$GITHUB_OUTPUT"

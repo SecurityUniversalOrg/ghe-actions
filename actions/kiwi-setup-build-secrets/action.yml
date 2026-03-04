@@ -1,0 +1,42 @@
+name: "Kiwi Setup Build Secrets"
+description: "Create authorized_keys and config files with restrictive permissions"
+inputs:
+  flavor: { required: true } # el9 | ubuntu24
+  root_pub_key: { required: true }
+  infraansied25519_pub_key: { required: true }
+  infraansirsa_pub_key: { required: true }
+  atat_token: { required: true }
+  atat_hosts: { required: true }
+
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        umask 077
+
+        case "${{ inputs.flavor }}" in
+          el9) BASE="kiwi/el/9" ;;
+          ubuntu24) BASE="kiwi/ubuntu/24" ;;
+          *) echo "Unsupported flavor: ${{ inputs.flavor }}" >&2; exit 2 ;;
+        esac
+
+        cd "$BASE"
+
+        mkdir -p root/root/.ssh
+        printf '%s\n' "${{ inputs.root_pub_key }}" > root/root/.ssh/authorized_keys
+        chmod 600 root/root/.ssh/authorized_keys
+
+        mkdir -p root/home/infraansi/.ssh
+        # NOTE: if you truly need both keys, append; your original workflow overwrote the file
+        printf '%s\n' "${{ inputs.infraansied25519_pub_key }}" >  root/home/infraansi/.ssh/authorized_keys
+        printf '%s\n' "${{ inputs.infraansirsa_pub_key }}"      >> root/home/infraansi/.ssh/authorized_keys
+        chmod 600 root/home/infraansi/.ssh/authorized_keys
+
+        mkdir -p root/home/infraansi
+        cat > root/home/infraansi/.atat <<EOF
+        ATAT_TOKEN="${{ inputs.atat_token }}"
+        ATAT_HOSTS="${{ inputs.atat_hosts }}"
+        EOF
+        chmod 600 root/home/infraansi/.atat

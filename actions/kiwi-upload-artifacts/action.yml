@@ -1,0 +1,30 @@
+name: "Kiwi Upload Artifacts"
+description: "Upload build outputs and logs with FedRAMP-friendly retention"
+inputs:
+  image_prefix: { required: true } # rocky9 | rhel9 | oel9 | ubuntu24
+  run_number: { required: true }
+
+runs:
+  using: "composite"
+  steps:
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.image_prefix }}-images-${{ inputs.run_number }}
+        path: |
+          /app/build/*/${{ inputs.image_prefix }}*.tar.gz
+          /app/build/*/${{ inputs.image_prefix }}*.vmdk
+          /app/build/*/${{ inputs.image_prefix }}*.vhd
+        retention-days: 30
+        if-no-files-found: warn
+
+    - name: Upload build logs (on failure)
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.image_prefix }}-build-logs-${{ inputs.run_number }}
+        path: |
+          /tmp/kiwi*.log
+          /var/log/kiwi*.log
+        retention-days: 7
+        if-no-files-found: warn
