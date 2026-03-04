@@ -1,8 +1,9 @@
 name: "Attach Container SBOM"
 description: "Attach a Docker Container SBOM using cosign"
 inputs:
-  primary_ref:        { required: true }
-  matrix_name:        { required: true }
+  primary_ref: { required: true }
+  matrix_name: { required: true }
+
 runs:
   using: "composite"
   steps:
@@ -11,13 +12,19 @@ runs:
       env:
         PRIMARY_FULL_IMAGE_REF: ${{ inputs.primary_ref }}
         COSIGN_EXPERIMENTAL: "true"
+        COSIGN_YES: "true"
       run: |
         set -euo pipefail
+
+        # Validate file exists + is JSON before attesting
+        test -s sbom.spdx.json
+        jq -e . sbom.spdx.json >/dev/null
+
         cosign attest \
-          --type spdx \
+          --type spdxjson \
           --predicate sbom.spdx.json \
           "${PRIMARY_FULL_IMAGE_REF}"
-    
+
     - uses: actions/upload-artifact@v4
       with:
         name: sbom-${{ inputs.matrix_name }}
