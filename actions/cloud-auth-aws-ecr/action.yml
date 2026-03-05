@@ -1,0 +1,46 @@
+name: 'Amazon ECR "Login" Action for GitHub Actions'
+description: 'Logs in the local Docker client to one or more Amazon ECR Private registries or an Amazon ECR Public registry'
+branding:
+  icon: 'cloud'
+  color: 'orange'
+inputs:
+  http-proxy:
+    description: >-
+      Proxy to use for the AWS SDK agent.
+    required: false
+  mask-password:
+    description: >-
+      Mask the docker password to prevent it being printed to action logs if debug logging is enabled.
+      NOTE: This will prevent the Docker password output from being shared between separate jobs.
+      Options: ['true', 'false']
+    required: false
+    default: 'true'
+  registries:
+    description: >-
+      A comma-delimited list of AWS account IDs that are associated with the ECR Private registries.
+      If you do not specify a registry, the default ECR Private registry is assumed.
+      If 'public' is given as input to 'registry-type', this input is ignored.
+    required: false
+  registry-type:
+    description: >-
+      Which ECR registry type to log into.
+      Options: [private, public]
+    required: false
+    default: private
+  skip-logout:
+    description: >-
+      Whether to skip explicit logout of the registries during post-job cleanup.
+      Exists for backward compatibility on self-hosted runners.
+      Not recommended.
+      Options: ['true', 'false']
+    required: false
+    default: 'false'
+outputs:
+  registry:
+    description: >-
+      The URI of the ECR Private or ECR Public registry.
+      If logging into multiple registries on ECR Private, this output will not be set.
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
+  post: 'dist/cleanup/index.js'
