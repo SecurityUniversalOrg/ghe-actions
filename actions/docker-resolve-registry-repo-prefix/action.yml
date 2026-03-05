@@ -1,0 +1,79 @@
+# .github/actions/docker-resolve-registry-repo-prefix/action.yml
+name: "Resolve registry repo prefix (ACR or ECR)"
+description: "Resolves a registry repo prefix for Azure ACR or AWS ECR. Uses explicit repo if provided, otherwise builds from org/repo vars."
+inputs:
+  repo:
+    description: "Optional explicit repo prefix (e.g., myregistry.azurecr.io/kaiserbros OR 123456789012.dkr.ecr.us-east-1.amazonaws.com/kaiserbros)"
+    required: false
+    default: ""
+  registry_provider:
+    description: "Registry provider: azure or aws"
+    required: true
+  aws_region:
+    description: "AWS region for ECR (required when registry_provider=aws)"
+    required: false
+    default: ""
+outputs:
+  repo:
+    description: "Resolved registry repo prefix"
+    value: ${{ steps.resolve.outputs.repo }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Resolve repo prefix (ACR or ECR)
+      id: resolve
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # If user provided inputs.repo, trust it.
+        if [[ -n "${{ inputs.repo }}" ]]; then
+          echo "repo=${{ inputs.repo }}" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        provider="${{ inputs.registry_provider }}"
+
+        if [[ "$provider" == "azure" ]]; then
+          # Expect org/repo vars:
+          #   ACR_LOGIN_SERVER (e.g. myregistry.azurecr.io)
+          # Optional:
+          #   REGISTRY_NAMESPACE (e.g. kaiserbros)
+          if [[ -z "${{ vars.ACR_LOGIN_SERVER }}" ]]; then
+            echo "Missing required vars.ACR_LOGIN_SERVER (e.g. myregistry.azurecr.io)" >&2
+            exit 1
+          fi
+
+          ns="${{ vars.REGISTRY_NAMESPACE }}"
+          if [[ -z "$ns" ]]; then ns="kaiserbros"; fi
+
+          echo "repo=${{ vars.ACR_LOGIN_SERVER }}/${ns}" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        if [[ "$provider" == "aws" ]]; then
+          # Expect org/repo vars:
+          #   AWS_ACCOUNT_ID (12-digit)
+          # Optional:
+          #   REGISTRY_NAMESPACE (e.g. kaiserbros)
+          if [[ -z "${{ vars.AWS_ACCOUNT_ID }}" ]]; then
+            echo "Missing required vars.AWS_ACCOUNT_ID (12-digit AWS account id)" >&2
+            exit 1
+          fi
+
+          region="${{ inputs.aws_region }}"
+          if [[ -z "$region" ]]; then
+            echo "Missing required input aws_region when registry_provider=aws" >&2
+            exit 1
+          fi
+
+          ns="${{ vars.REGISTRY_NAMESPACE }}"
+          if [[ -z "$ns" ]]; then ns="kaiserbros"; fi
+
+          echo "repo=${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${region}.amazonaws.com/${ns}" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        echo "Unsupported registry_provider: $provider (expected: azure|aws)" >&2
+        exit 1
