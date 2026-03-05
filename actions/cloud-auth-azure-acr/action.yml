@@ -1,0 +1,43 @@
+# .github/actions/cloud-auth-azure-acr/action.yml
+name: "Login to Azure Container Registry (ACR)"
+description: "Logs Docker into ACR using Azure CLI. Derives ACR name from a repo prefix like <registry>.azurecr.io/<namespace>."
+inputs:
+  repo_prefix:
+    description: "Repo prefix in the form <registry>.azurecr.io/<namespace>"
+    required: true
+outputs:
+  acr_name:
+    description: "Derived ACR registry name (without .azurecr.io)"
+    value: ${{ steps.login.outputs.acr_name }}
+  login_server:
+    description: "Derived ACR login server (<registry>.azurecr.io)"
+    value: ${{ steps.login.outputs.login_server }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Login to ACR
+      id: login
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        repo="${{ inputs.repo_prefix }}"
+        login_server="${repo%%/*}"
+
+        if [[ "$login_server" != *.azurecr.io ]]; then
+          echo "repo_prefix must start with an ACR login server like <name>.azurecr.io/..., got: $repo" >&2
+          exit 1
+        fi
+
+        acr_name="${login_server%%.azurecr.io}"
+        if [[ -z "$acr_name" ]]; then
+          echo "Failed to derive ACR name from login server: $login_server" >&2
+          exit 1
+        fi
+
+        echo "login_server=$login_server" >> "$GITHUB_OUTPUT"
+        echo "acr_name=$acr_name" >> "$GITHUB_OUTPUT"
+
+        # Requires prior azure/login@v2 (OIDC or SP creds) and Azure CLI available on runner
+        az acr login --name "$acr_name"
