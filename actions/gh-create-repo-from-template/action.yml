@@ -77,7 +77,6 @@ runs:
           --arg owner "$ORG_INPUT" \
           --arg name "$REPO_NAME_INPUT" \
           --arg description "$DESCRIPTION_INPUT" \
-          --arg visibility "$visibility" \
           --argjson private "$private" \
           '
           {
@@ -85,7 +84,6 @@ runs:
             name: $name,
             description: $description,
             private: $private,
-            visibility: $visibility,
             include_all_branches: false
           }
           ')"
