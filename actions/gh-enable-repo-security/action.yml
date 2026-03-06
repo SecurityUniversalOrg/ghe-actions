@@ -1,0 +1,92 @@
+name: Enable repository security features
+description: Enable baseline security features on a repository
+
+inputs:
+  github_host:
+    required: true
+    default: "github.com"
+  org:
+    required: true
+  repo_name:
+    required: true
+  enable_secret_scanning:
+    required: true
+  enable_secret_scanning_push_protection:
+    required: true
+  enable_dependabot_alerts:
+    required: true
+  enable_dependabot_security_updates:
+    required: true
+  enable_private_vulnerability_reporting:
+    required: true
+  github_token:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_HOST_INPUT: ${{ inputs.github_host }}
+        TOKEN_INPUT: ${{ inputs.github_token }}
+        ORG_INPUT: ${{ inputs.org }}
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        ENABLE_SECRET_SCANNING_INPUT: ${{ inputs.enable_secret_scanning }}
+        ENABLE_SECRET_SCANNING_PUSH_PROTECTION_INPUT: ${{ inputs.enable_secret_scanning_push_protection }}
+        ENABLE_DEPENDABOT_ALERTS_INPUT: ${{ inputs.enable_dependabot_alerts }}
+        ENABLE_DEPENDABOT_SECURITY_UPDATES_INPUT: ${{ inputs.enable_dependabot_security_updates }}
+        ENABLE_PRIVATE_VULN_REPORTING_INPUT: ${{ inputs.enable_private_vulnerability_reporting }}
+      run: |
+        set -euo pipefail
+
+        command -v gh >/dev/null 2>&1 || { echo "ERROR: gh is required"; exit 1; }
+
+        if [[ "$GH_HOST_INPUT" == "github.com" ]]; then
+          export GH_TOKEN="$TOKEN_INPUT"
+        else
+          export GH_ENTERPRISE_TOKEN="$TOKEN_INPUT"
+          export GH_HOST="$GH_HOST_INPUT"
+        fi
+
+        repo="${ORG_INPUT}/${REPO_NAME_INPUT}"
+
+        if [[ "$ENABLE_DEPENDABOT_ALERTS_INPUT" == "true" ]]; then
+          gh api \
+            --hostname "$GH_HOST_INPUT" \
+            -X PUT \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${repo}/vulnerability-alerts" >/dev/null || true
+        fi
+
+        if [[ "$ENABLE_SECRET_SCANNING_INPUT" == "true" ]]; then
+          gh api \
+            --hostname "$GH_HOST_INPUT" \
+            -X PATCH \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${repo}" \
+            -f security_and_analysis[secret_scanning][status]=enabled >/dev/null || true
+        fi
+
+        if [[ "$ENABLE_SECRET_SCANNING_PUSH_PROTECTION_INPUT" == "true" ]]; then
+          gh api \
+            --hostname "$GH_HOST_INPUT" \
+            -X PATCH \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${repo}" \
+            -f security_and_analysis[secret_scanning_push_protection][status]=enabled >/dev/null || true
+        fi
+
+        if [[ "$ENABLE_PRIVATE_VULN_REPORTING_INPUT" == "true" ]]; then
+          gh api \
+            --hostname "$GH_HOST_INPUT" \
+            -X PATCH \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${repo}" \
+            -f security_and_analysis[private_vulnerability_reporting][status]=enabled >/dev/null || true
+        fi
+
+        if [[ "$ENABLE_DEPENDABOT_SECURITY_UPDATES_INPUT" == "true" ]]; then
+          echo "Dependabot security updates should be provided via template content and baseline config."
+        fi
+
+        echo "Completed best-effort security feature enablement for ${repo}"

@@ -1,0 +1,66 @@
+name: Print enterprise repository plan
+description: Print the normalized enterprise repository request plan
+
+inputs:
+  github_host:
+    required: true
+  org:
+    required: true
+  repo_name:
+    required: true
+  repo_type:
+    required: true
+  description:
+    required: true
+  visibility:
+    required: true
+  template_repo:
+    required: true
+  default_branch:
+    required: true
+  topics_json:
+    required: true
+  admin_teams_json:
+    required: true
+  write_teams_json:
+    required: true
+  read_teams_json:
+    required: true
+  ruleset_names_json:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GITHUB_HOST_INPUT: ${{ inputs.github_host }}
+        ORG_INPUT: ${{ inputs.org }}
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        REPO_TYPE_INPUT: ${{ inputs.repo_type }}
+        DESCRIPTION_INPUT: ${{ inputs.description }}
+        VISIBILITY_INPUT: ${{ inputs.visibility }}
+        TEMPLATE_REPO_INPUT: ${{ inputs.template_repo }}
+        DEFAULT_BRANCH_INPUT: ${{ inputs.default_branch }}
+        TOPICS_JSON_INPUT: ${{ inputs.topics_json }}
+        ADMIN_TEAMS_JSON_INPUT: ${{ inputs.admin_teams_json }}
+        WRITE_TEAMS_JSON_INPUT: ${{ inputs.write_teams_json }}
+        READ_TEAMS_JSON_INPUT: ${{ inputs.read_teams_json }}
+        RULESET_NAMES_JSON_INPUT: ${{ inputs.ruleset_names_json }}
+      run: |
+        set -euo pipefail
+
+        echo "Enterprise repository request plan"
+        echo "  Host:            $GITHUB_HOST_INPUT"
+        echo "  Org:             $ORG_INPUT"
+        echo "  Repo name:       $REPO_NAME_INPUT"
+        echo "  Repo type:       $REPO_TYPE_INPUT"
+        echo "  Visibility:      $VISIBILITY_INPUT"
+        echo "  Description:     $DESCRIPTION_INPUT"
+        echo "  Template repo:   $TEMPLATE_REPO_INPUT"
+        echo "  Default branch:  $DEFAULT_BRANCH_INPUT"
+        echo "  Topics:          $(echo "$TOPICS_JSON_INPUT" | jq -cr '.')"
+        echo "  Admin teams:     $(echo "$ADMIN_TEAMS_JSON_INPUT" | jq -cr '.')"
+        echo "  Write teams:     $(echo "$WRITE_TEAMS_JSON_INPUT" | jq -cr '.')"
+        echo "  Read teams:      $(echo "$READ_TEAMS_JSON_INPUT" | jq -cr '.')"
+        echo "  Rulesets:        $(echo "$RULESET_NAMES_JSON_INPUT" | jq -cr '.')"

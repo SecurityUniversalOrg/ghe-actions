@@ -1,0 +1,90 @@
+name: Add repository to org rulesets by name
+description: Add a repository to one or more org rulesets using repository_name.include
+
+inputs:
+  github_host:
+    required: true
+    default: "github.com"
+  org:
+    required: true
+  repo_name:
+    required: true
+  ruleset_names_json:
+    required: true
+  github_token:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_HOST_INPUT: ${{ inputs.github_host }}
+        TOKEN_INPUT: ${{ inputs.github_token }}
+        ORG_INPUT: ${{ inputs.org }}
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        RULESET_NAMES_JSON_INPUT: ${{ inputs.ruleset_names_json }}
+      run: |
+        set -euo pipefail
+
+        command -v gh >/dev/null 2>&1 || { echo "ERROR: gh is required"; exit 1; }
+        command -v jq >/dev/null 2>&1 || { echo "ERROR: jq is required"; exit 1; }
+
+        if [[ "$GH_HOST_INPUT" == "github.com" ]]; then
+          export GH_TOKEN="$TOKEN_INPUT"
+        else
+          export GH_ENTERPRISE_TOKEN="$TOKEN_INPUT"
+          export GH_HOST="$GH_HOST_INPUT"
+        fi
+
+        rulesets="$(gh api \
+          --hostname "$GH_HOST_INPUT" \
+          -H "Accept: application/vnd.github+json" \
+          "/orgs/${ORG_INPUT}/rulesets")"
+
+        while IFS= read -r ruleset_name; do
+          [[ -z "$ruleset_name" ]] && continue
+
+          ruleset="$(echo "$rulesets" | jq -c --arg name "$ruleset_name" '.[] | select(.name == $name)' | head -n 1)"
+
+          if [[ -z "$ruleset" ]]; then
+            echo "ERROR: ruleset '$ruleset_name' not found in org '$ORG_INPUT'"
+            exit 1
+          fi
+
+          ruleset_id="$(echo "$ruleset" | jq -r '.id')"
+
+          full_ruleset="$(gh api \
+            --hostname "$GH_HOST_INPUT" \
+            -H "Accept: application/vnd.github+json" \
+            "/orgs/${ORG_INPUT}/rulesets/${ruleset_id}")"
+
+          current_includes="$(echo "$full_ruleset" | jq -c '.conditions.repository_name.include // []')"
+          new_includes="$(jq -c --arg repo "$REPO_NAME_INPUT" --argjson current "$current_includes" '$current + [$repo] | unique' <<< 'null')"
+
+          payload="$(echo "$full_ruleset" | jq -c --argjson includes "$new_includes" '
+            {
+              name: .name,
+              target: .target,
+              enforcement: .enforcement,
+              bypass_actors: (.bypass_actors // []),
+              conditions: ((.conditions // {}) + {
+                repository_name: ((.conditions.repository_name // {}) + { include: $includes })
+              }),
+              rules: (.rules // [])
+            }'
+          )"
+
+          tmp="$(mktemp)"
+          printf '%s' "$payload" > "$tmp"
+
+          echo "Adding repo '$REPO_NAME_INPUT' to ruleset '$ruleset_name'"
+
+          gh api \
+            --hostname "$GH_HOST_INPUT" \
+            -X PATCH \
+            -H "Accept: application/vnd.github+json" \
+            --input "$tmp" \
+            "/orgs/${ORG_INPUT}/rulesets/${ruleset_id}" >/dev/null
+
+        done < <(echo "$RULESET_NAMES_JSON_INPUT" | jq -r '.[]')

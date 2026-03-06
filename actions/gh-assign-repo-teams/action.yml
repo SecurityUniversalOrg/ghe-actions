@@ -1,0 +1,70 @@
+name: Assign repository teams
+description: Assign admin, write, and read teams to a repository
+
+inputs:
+  github_host:
+    required: true
+    default: "github.com"
+  org:
+    required: true
+  repo_name:
+    required: true
+  admin_teams_json:
+    required: true
+  write_teams_json:
+    required: true
+  read_teams_json:
+    required: true
+  github_token:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_HOST_INPUT: ${{ inputs.github_host }}
+        TOKEN_INPUT: ${{ inputs.github_token }}
+        ORG_INPUT: ${{ inputs.org }}
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        ADMIN_TEAMS_JSON_INPUT: ${{ inputs.admin_teams_json }}
+        WRITE_TEAMS_JSON_INPUT: ${{ inputs.write_teams_json }}
+        READ_TEAMS_JSON_INPUT: ${{ inputs.read_teams_json }}
+      run: |
+        set -euo pipefail
+
+        command -v gh >/dev/null 2>&1 || { echo "ERROR: gh is required"; exit 1; }
+        command -v jq >/dev/null 2>&1 || { echo "ERROR: jq is required"; exit 1; }
+
+        if [[ "$GH_HOST_INPUT" == "github.com" ]]; then
+          export GH_TOKEN="$TOKEN_INPUT"
+        else
+          export GH_ENTERPRISE_TOKEN="$TOKEN_INPUT"
+          export GH_HOST="$GH_HOST_INPUT"
+        fi
+
+        assign_team() {
+          local team_slug="$1"
+          local permission="$2"
+
+          echo "Assigning team '$team_slug' with permission '$permission'"
+
+          gh api \
+            --hostname "$GH_HOST_INPUT" \
+            -X PUT \
+            -H "Accept: application/vnd.github+json" \
+            "/orgs/${ORG_INPUT}/teams/${team_slug}/repos/${ORG_INPUT}/${REPO_NAME_INPUT}" \
+            -f permission="$permission" >/dev/null
+        }
+
+        while IFS= read -r team; do
+          [[ -n "$team" ]] && assign_team "$team" "admin"
+        done < <(echo "$ADMIN_TEAMS_JSON_INPUT" | jq -r '.[]')
+
+        while IFS= read -r team; do
+          [[ -n "$team" ]] && assign_team "$team" "push"
+        done < <(echo "$WRITE_TEAMS_JSON_INPUT" | jq -r '.[]')
+
+        while IFS= read -r team; do
+          [[ -n "$team" ]] && assign_team "$team" "pull"
+        done < <(echo "$READ_TEAMS_JSON_INPUT" | jq -r '.[]')

@@ -1,0 +1,160 @@
+name: Build enterprise repository plan
+description: Derive enterprise repo settings, teams, rulesets, and security defaults
+
+inputs:
+  repo_name:
+    required: true
+  repo_type:
+    required: true
+  visibility:
+    required: true
+  description:
+    required: false
+    default: ""
+
+outputs:
+  description:
+    value: ${{ steps.plan.outputs.description }}
+  template_repo:
+    value: ${{ steps.plan.outputs.template_repo }}
+  repo_topics_json:
+    value: ${{ steps.plan.outputs.repo_topics_json }}
+  default_branch:
+    value: ${{ steps.plan.outputs.default_branch }}
+  visibility:
+    value: ${{ steps.plan.outputs.visibility }}
+  auto_init:
+    value: ${{ steps.plan.outputs.auto_init }}
+  admin_teams_json:
+    value: ${{ steps.plan.outputs.admin_teams_json }}
+  write_teams_json:
+    value: ${{ steps.plan.outputs.write_teams_json }}
+  read_teams_json:
+    value: ${{ steps.plan.outputs.read_teams_json }}
+  ruleset_names_json:
+    value: ${{ steps.plan.outputs.ruleset_names_json }}
+  enable_secret_scanning:
+    value: ${{ steps.plan.outputs.enable_secret_scanning }}
+  enable_secret_scanning_push_protection:
+    value: ${{ steps.plan.outputs.enable_secret_scanning_push_protection }}
+  enable_dependabot_alerts:
+    value: ${{ steps.plan.outputs.enable_dependabot_alerts }}
+  enable_dependabot_security_updates:
+    value: ${{ steps.plan.outputs.enable_dependabot_security_updates }}
+  enable_private_vulnerability_reporting:
+    value: ${{ steps.plan.outputs.enable_private_vulnerability_reporting }}
+
+runs:
+  using: composite
+  steps:
+    - id: plan
+      shell: bash
+      env:
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        REPO_TYPE_INPUT: ${{ inputs.repo_type }}
+        VISIBILITY_INPUT: ${{ inputs.visibility }}
+        DESCRIPTION_INPUT: ${{ inputs.description }}
+      run: |
+        set -euo pipefail
+
+        repo_name="$REPO_NAME_INPUT"
+        repo_type="$REPO_TYPE_INPUT"
+        visibility="$VISIBILITY_INPUT"
+        description="$DESCRIPTION_INPUT"
+
+        default_branch="main"
+        auto_init="false"
+        template_repo=""
+        topics_json='[]'
+
+        admin_teams_json='["github-platform-admins"]'
+        write_teams_json='[]'
+        read_teams_json='["github-auditors"]'
+        ruleset_names_json='["global-repository-baseline"]'
+
+        enable_secret_scanning="true"
+        enable_secret_scanning_push_protection="true"
+        enable_dependabot_alerts="true"
+        enable_dependabot_security_updates="true"
+        enable_private_vulnerability_reporting="true"
+
+        if [[ -z "$description" ]]; then
+          case "$repo_type" in
+            terraform) description="Terraform infrastructure repository for $repo_name" ;;
+            app) description="Application repository for $repo_name" ;;
+            library) description="Reusable library repository for $repo_name" ;;
+            image) description="Container image build repository for $repo_name" ;;
+            docker) description="Docker build repository for $repo_name" ;;
+            helm) description="Helm chart repository for $repo_name" ;;
+            configuration) description="Configuration repository for $repo_name" ;;
+            cicd) description="CI/CD automation repository for $repo_name" ;;
+          esac
+        fi
+
+        case "$repo_type" in
+          terraform)
+            template_repo="secure-templates/template-terraform"
+            topics_json='["terraform","infrastructure","iac"]'
+            write_teams_json='["terraform-engineering","devsecops-engineering"]'
+            read_teams_json='["github-auditors","cloud-security-reviewers"]'
+            ruleset_names_json='["global-repository-baseline","terraform-repository-baseline"]'
+            ;;
+          app)
+            template_repo="secure-templates/template-app"
+            topics_json='["application","secure-baseline"]'
+            write_teams_json='["app-engineering","devsecops-engineering"]'
+            read_teams_json='["github-auditors","appsec-reviewers"]'
+            ruleset_names_json='["global-repository-baseline","application-repository-baseline"]'
+            ;;
+          library)
+            template_repo="secure-templates/template-library"
+            topics_json='["library","secure-baseline"]'
+            write_teams_json='["shared-services-engineering","devsecops-engineering"]'
+            read_teams_json='["github-auditors","appsec-reviewers"]'
+            ruleset_names_json='["global-repository-baseline","library-repository-baseline"]'
+            ;;
+          image|docker)
+            template_repo="secure-templates/template-image"
+            topics_json='["container","supply-chain","secure-baseline"]'
+            write_teams_json='["platform-images","devsecops-engineering"]'
+            read_teams_json='["github-auditors","container-security-reviewers"]'
+            ruleset_names_json='["global-repository-baseline","container-repository-baseline"]'
+            ;;
+          helm)
+            template_repo="secure-templates/template-helm"
+            topics_json='["helm","kubernetes","secure-baseline"]'
+            write_teams_json='["platform-engineering","devsecops-engineering"]'
+            read_teams_json='["github-auditors","platform-security-reviewers"]'
+            ruleset_names_json='["global-repository-baseline","helm-repository-baseline"]'
+            ;;
+          configuration)
+            template_repo="secure-templates/template-configuration"
+            topics_json='["configuration","secure-baseline"]'
+            write_teams_json='["platform-engineering","operations-engineering"]'
+            read_teams_json='["github-auditors","platform-security-reviewers"]'
+            ruleset_names_json='["global-repository-baseline","configuration-repository-baseline"]'
+            ;;
+          cicd)
+            template_repo="secure-templates/template-cicd"
+            topics_json='["github-actions","devsecops","secure-baseline"]'
+            write_teams_json='["devsecops-engineering","platform-engineering"]'
+            read_teams_json='["github-auditors","appsec-reviewers"]'
+            ruleset_names_json='["global-repository-baseline","cicd-repository-baseline"]'
+            ;;
+        esac
+
+        echo "description=$description" >> "$GITHUB_OUTPUT"
+        echo "template_repo=$template_repo" >> "$GITHUB_OUTPUT"
+        echo "repo_topics_json=$topics_json" >> "$GITHUB_OUTPUT"
+        echo "default_branch=$default_branch" >> "$GITHUB_OUTPUT"
+        echo "visibility=$visibility" >> "$GITHUB_OUTPUT"
+        echo "auto_init=$auto_init" >> "$GITHUB_OUTPUT"
+        echo "admin_teams_json=$admin_teams_json" >> "$GITHUB_OUTPUT"
+        echo "write_teams_json=$write_teams_json" >> "$GITHUB_OUTPUT"
+        echo "read_teams_json=$read_teams_json" >> "$GITHUB_OUTPUT"
+        echo "ruleset_names_json=$ruleset_names_json" >> "$GITHUB_OUTPUT"
+        echo "enable_secret_scanning=$enable_secret_scanning" >> "$GITHUB_OUTPUT"
+        echo "enable_secret_scanning_push_protection=$enable_secret_scanning_push_protection" >> "$GITHUB_OUTPUT"
+        echo "enable_dependabot_alerts=$enable_dependabot_alerts" >> "$GITHUB_OUTPUT"
+        echo "enable_dependabot_security_updates=$enable_dependabot_security_updates" >> "$GITHUB_OUTPUT"
+        echo "enable_private_vulnerability_reporting=$enable_private_vulnerability_reporting" >> "$GITHUB_OUTPUT"
