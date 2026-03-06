@@ -1,0 +1,256 @@
+name: Create Repository
+description: Create a new GitHub repository in an org or user account (GitHub Cloud or GHES)
+
+inputs:
+  github_host:
+    description: "GitHub host (github.com or your GHES hostname)"
+    required: false
+    default: "github.com"
+
+  # If org is set, creates under org. If empty, creates under the authenticated user.
+  org:
+    description: "Target organization (optional). If omitted, creates under the authenticated user."
+    required: false
+    default: ""
+
+  name:
+    description: "Repository name (no owner prefix)"
+    required: true
+
+  description:
+    description: "Repository description"
+    required: false
+    default: ""
+
+  visibility:
+    description: "public | private | internal (internal may not be supported on all hosts)"
+    required: false
+    default: "private"
+
+  homepage:
+    description: "Repository homepage URL"
+    required: false
+    default: ""
+
+  has_issues:
+    description: "Enable issues (true/false)"
+    required: false
+    default: "true"
+
+  has_projects:
+    description: "Enable projects (true/false)"
+    required: false
+    default: "false"
+
+  has_wiki:
+    description: "Enable wiki (true/false)"
+    required: false
+    default: "false"
+
+  auto_init:
+    description: "Initialize with an empty commit (true/false)"
+    required: false
+    default: "true"
+
+  gitignore_template:
+    description: "Optional gitignore template name (e.g., 'Terraform', 'Node')"
+    required: false
+    default: ""
+
+  license_template:
+    description: "Optional license template key (e.g., 'mit', 'apache-2.0')"
+    required: false
+    default: ""
+
+  allow_squash_merge:
+    description: "Allow squash merge (true/false)"
+    required: false
+    default: "true"
+
+  allow_merge_commit:
+    description: "Allow merge commit (true/false)"
+    required: false
+    default: "false"
+
+  allow_rebase_merge:
+    description: "Allow rebase merge (true/false)"
+    required: false
+    default: "true"
+
+  delete_branch_on_merge:
+    description: "Automatically delete head branches (true/false)"
+    required: false
+    default: "true"
+
+  github_token:
+    description: "Token with permission to create repos in the target org/user"
+    required: true
+
+outputs:
+  full_name:
+    description: "owner/name of the created repo"
+    value: ${{ steps.create.outputs.full_name }}
+  html_url:
+    description: "Web URL of the created repo"
+    value: ${{ steps.create.outputs.html_url }}
+  repo_id:
+    description: "Repository id"
+    value: ${{ steps.create.outputs.repo_id }}
+
+runs:
+  using: composite
+  steps:
+    - name: Preflight (gh + jq)
+      shell: bash
+      env:
+        GH_HOST_INPUT: ${{ inputs.github_host }}
+        TOKEN_INPUT: ${{ inputs.github_token }}
+      run: |
+        set -euo pipefail
+
+        command -v gh >/dev/null 2>&1 || { echo "ERROR: gh is required on the runner."; exit 1; }
+        command -v jq >/dev/null 2>&1 || { echo "ERROR: jq is required on the runner."; exit 1; }
+
+        # Configure auth for the chosen host
+        if [[ "$GH_HOST_INPUT" == "github.com" ]]; then
+          export GH_TOKEN="$TOKEN_INPUT"
+        else
+          export GH_ENTERPRISE_TOKEN="$TOKEN_INPUT"
+          export GH_HOST="$GH_HOST_INPUT"
+        fi
+
+        gh auth status --hostname "$GH_HOST_INPUT" >/dev/null 2>&1 || {
+          echo "ERROR: gh authentication failed for host: $GH_HOST_INPUT"
+          exit 1
+        }
+
+    - name: Create repository
+      id: create
+      shell: bash
+      env:
+        GH_HOST_INPUT: ${{ inputs.github_host }}
+        TOKEN_INPUT: ${{ inputs.github_token }}
+
+        ORG_INPUT: ${{ inputs.org }}
+        NAME_INPUT: ${{ inputs.name }}
+        DESC_INPUT: ${{ inputs.description }}
+        VIS_INPUT: ${{ inputs.visibility }}
+        HOME_INPUT: ${{ inputs.homepage }}
+
+        HAS_ISSUES_INPUT: ${{ inputs.has_issues }}
+        HAS_PROJECTS_INPUT: ${{ inputs.has_projects }}
+        HAS_WIKI_INPUT: ${{ inputs.has_wiki }}
+        AUTO_INIT_INPUT: ${{ inputs.auto_init }}
+
+        GITIGNORE_INPUT: ${{ inputs.gitignore_template }}
+        LICENSE_INPUT: ${{ inputs.license_template }}
+
+        ALLOW_SQUASH_INPUT: ${{ inputs.allow_squash_merge }}
+        ALLOW_MERGE_COMMIT_INPUT: ${{ inputs.allow_merge_commit }}
+        ALLOW_REBASE_INPUT: ${{ inputs.allow_rebase_merge }}
+        DELETE_BRANCH_INPUT: ${{ inputs.delete_branch_on_merge }}
+      run: |
+        set -euo pipefail
+
+        if [[ "$GH_HOST_INPUT" == "github.com" ]]; then
+          export GH_TOKEN="$TOKEN_INPUT"
+        else
+          export GH_ENTERPRISE_TOKEN="$TOKEN_INPUT"
+          export GH_HOST="$GH_HOST_INPUT"
+        fi
+
+        # Validate inputs
+        if [[ -z "$NAME_INPUT" ]]; then
+          echo "ERROR: inputs.name is required"
+          exit 1
+        fi
+
+        # Map visibility to API fields (org/user endpoints accept 'private' and 'visibility')
+        private="false"
+        visibility="$VIS_INPUT"
+
+        case "$VIS_INPUT" in
+          private)
+            private="true"
+            ;;
+          public)
+            private="false"
+            ;;
+          internal)
+            # 'internal' is supported for org repos in many enterprise configurations; may fail on some hosts.
+            private="false"
+            ;;
+          *)
+            echo "ERROR: invalid visibility '$VIS_INPUT' (must be public|private|internal)"
+            exit 1
+            ;;
+        esac
+
+        endpoint=""
+        if [[ -n "$ORG_INPUT" ]]; then
+          endpoint="/orgs/${ORG_INPUT}/repos"
+        else
+          endpoint="/user/repos"
+        fi
+
+        # Build JSON payload
+        payload="$(jq -c -n \
+          --arg name "$NAME_INPUT" \
+          --arg description "$DESC_INPUT" \
+          --arg homepage "$HOME_INPUT" \
+          --arg visibility "$visibility" \
+          --argjson private "$private" \
+          --argjson has_issues "$HAS_ISSUES_INPUT" \
+          --argjson has_projects "$HAS_PROJECTS_INPUT" \
+          --argjson has_wiki "$HAS_WIKI_INPUT" \
+          --argjson auto_init "$AUTO_INIT_INPUT" \
+          --arg gitignore_template "$GITIGNORE_INPUT" \
+          --arg license_template "$LICENSE_INPUT" \
+          --argjson allow_squash_merge "$ALLOW_SQUASH_INPUT" \
+          --argjson allow_merge_commit "$ALLOW_MERGE_COMMIT_INPUT" \
+          --argjson allow_rebase_merge "$ALLOW_REBASE_INPUT" \
+          --argjson delete_branch_on_merge "$DELETE_BRANCH_INPUT" \
+          '
+          .name = $name
+          | .description = ($description | select(length>0))
+          | .homepage = ($homepage | select(length>0))
+          | .private = $private
+          | .visibility = ($visibility | select(length>0))
+          | .has_issues = $has_issues
+          | .has_projects = $has_projects
+          | .has_wiki = $has_wiki
+          | .auto_init = $auto_init
+          | .gitignore_template = ($gitignore_template | select(length>0))
+          | .license_template = ($license_template | select(length>0))
+          | .allow_squash_merge = $allow_squash_merge
+          | .allow_merge_commit = $allow_merge_commit
+          | .allow_rebase_merge = $allow_rebase_merge
+          | .delete_branch_on_merge = $delete_branch_on_merge
+          ')"
+
+        echo "Creating repo via API endpoint: $endpoint"
+        tmp="$(mktemp)"
+        printf '%s' "$payload" > "$tmp"
+
+        resp="$(gh api \
+          --hostname "$GH_HOST_INPUT" \
+          -H "Accept: application/vnd.github+json" \
+          -X POST \
+          --input "$tmp" \
+          "$endpoint")"
+
+        full_name="$(jq -r '.full_name' <<< "$resp")"
+        html_url="$(jq -r '.html_url' <<< "$resp")"
+        repo_id="$(jq -r '.id' <<< "$resp")"
+
+        if [[ -z "$full_name" || "$full_name" == "null" ]]; then
+          echo "ERROR: repo creation failed; response:"
+          echo "$resp" | jq .
+          exit 1
+        fi
+
+        echo "Created: $full_name ($html_url)"
+
+        echo "full_name=$full_name" >> "$GITHUB_OUTPUT"
+        echo "html_url=$html_url" >> "$GITHUB_OUTPUT"
+        echo "repo_id=$repo_id" >> "$GITHUB_OUTPUT"
