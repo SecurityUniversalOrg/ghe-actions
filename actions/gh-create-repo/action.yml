@@ -198,7 +198,7 @@ runs:
 
         # Build JSON payload
         payload="$(jq -c -n \
-          --arg name "$REPO_NAME_INPUT" \
+          --arg name "$REPO_NAME_TRIMMED" \
           --arg description "$DESC_INPUT" \
           --arg homepage "$HOME_INPUT" \
           --arg visibility "$visibility" \
@@ -214,22 +214,29 @@ runs:
           --argjson allow_rebase_merge "$ALLOW_REBASE_INPUT" \
           --argjson delete_branch_on_merge "$DELETE_BRANCH_INPUT" \
           '
-          .name = $name
-          | .description = ($description | select(length>0))
-          | .homepage = ($homepage | select(length>0))
-          | .private = $private
-          | .visibility = ($visibility | select(length>0))
-          | .has_issues = $has_issues
-          | .has_projects = $has_projects
-          | .has_wiki = $has_wiki
-          | .auto_init = $auto_init
-          | .gitignore_template = ($gitignore_template | select(length>0))
-          | .license_template = ($license_template | select(length>0))
-          | .allow_squash_merge = $allow_squash_merge
-          | .allow_merge_commit = $allow_merge_commit
-          | .allow_rebase_merge = $allow_rebase_merge
-          | .delete_branch_on_merge = $delete_branch_on_merge
+          # Base required object (always emitted)
+          {
+            name: $name,
+            private: $private,
+            visibility: $visibility,
+            has_issues: $has_issues,
+            has_projects: $has_projects,
+            has_wiki: $has_wiki,
+            auto_init: $auto_init,
+            allow_squash_merge: $allow_squash_merge,
+            allow_merge_commit: $allow_merge_commit,
+            allow_rebase_merge: $allow_rebase_merge,
+            delete_branch_on_merge: $delete_branch_on_merge
+          }
+          # Optional fields merged safely (never collapses output)
+          + (if ($description | length) > 0 then {description: $description} else {} end)
+          + (if ($homepage | length) > 0 then {homepage: $homepage} else {} end)
+          + (if ($gitignore_template | length) > 0 then {gitignore_template: $gitignore_template} else {} end)
+          + (if ($license_template | length) > 0 then {license_template: $license_template} else {} end)
           ')"
+
+        echo "DEBUG: payload bytes=$(printf '%s' "$payload" | wc -c | tr -d ' ')"
+        echo "DEBUG: payload.name=$(printf '%s' "$payload" | jq -r '.name // "<missing>"')"
 
         echo "Creating repo via API endpoint: $endpoint"
         tmp="$(mktemp)"
