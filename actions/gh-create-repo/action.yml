@@ -13,7 +13,7 @@ inputs:
     required: false
     default: ""
 
-  name:
+  repo_name:
     description: "Repository name (no owner prefix)"
     required: true
 
@@ -132,7 +132,7 @@ runs:
         TOKEN_INPUT: ${{ inputs.github_token }}
 
         ORG_INPUT: ${{ inputs.org }}
-        NAME_INPUT: ${{ inputs.name }}
+        NAME_INPUT: ${{ inputs.repo_name }}
         DESC_INPUT: ${{ inputs.description }}
         VIS_INPUT: ${{ inputs.visibility }}
         HOME_INPUT: ${{ inputs.homepage }}
