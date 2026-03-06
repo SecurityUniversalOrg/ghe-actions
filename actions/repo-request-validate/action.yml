@@ -1,0 +1,82 @@
+name: Validate repository request
+description: Validate and normalize requested repository settings
+
+inputs:
+  repo_name:
+    required: true
+  repo_type:
+    required: true
+  visibility:
+    required: true
+
+outputs:
+  repo_name:
+    value: ${{ steps.validate.outputs.repo_name }}
+  normalized_type:
+    value: ${{ steps.validate.outputs.normalized_type }}
+
+runs:
+  using: composite
+  steps:
+    - id: validate
+      shell: bash
+      env:
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        REPO_TYPE_INPUT: ${{ inputs.repo_type }}
+        VISIBILITY_INPUT: ${{ inputs.visibility }}
+      run: |
+        set -euo pipefail
+
+        repo_name="$(echo -n "$REPO_NAME_INPUT" | tr '[:upper:]' '[:lower:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        repo_type="$(echo -n "$REPO_TYPE_INPUT" | tr '[:upper:]' '[:lower:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        visibility="$(echo -n "$VISIBILITY_INPUT" | tr '[:upper:]' '[:lower:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+
+        if [[ -z "$repo_name" ]]; then
+          echo "ERROR: repo_name is required"
+          exit 1
+        fi
+
+        if [[ ! "$repo_name" =~ ^[a-z0-9._-]+$ ]]; then
+          echo "ERROR: repo_name contains invalid characters. Allowed: a-z 0-9 . _ -"
+          exit 1
+        fi
+
+        case "$repo_type" in
+          app|library|terraform|image|docker|helm|configuration|cicd) ;;
+          *)
+            echo "ERROR: invalid repo_type '$repo_type'"
+            exit 1
+            ;;
+        esac
+
+        case "$visibility" in
+          private|internal|public) ;;
+          *)
+            echo "ERROR: invalid visibility '$visibility'"
+            exit 1
+            ;;
+        esac
+
+        case "$repo_type" in
+          terraform)
+            [[ "$repo_name" == tf-* ]] || {
+              echo "ERROR: terraform repositories must start with 'tf-'"
+              exit 1
+            }
+            ;;
+          helm)
+            [[ "$repo_name" == helm-* ]] || {
+              echo "ERROR: helm repositories must start with 'helm-'"
+              exit 1
+            }
+            ;;
+          image|docker)
+            [[ "$repo_name" == img-* || "$repo_name" == docker-* ]] || {
+              echo "ERROR: image/docker repositories must start with 'img-' or 'docker-'"
+              exit 1
+            }
+            ;;
+        esac
+
+        echo "repo_name=$repo_name" >> "$GITHUB_OUTPUT"
+        echo "normalized_type=$repo_type" >> "$GITHUB_OUTPUT"

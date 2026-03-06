@@ -1,0 +1,101 @@
+name: Build repository request plan
+description: Derive template and baseline settings from requested repository type
+
+inputs:
+  repo_name:
+    required: true
+  repo_type:
+    required: true
+  visibility:
+    required: true
+  description:
+    required: false
+    default: ""
+
+outputs:
+  description:
+    value: ${{ steps.plan.outputs.description }}
+  template_repo:
+    value: ${{ steps.plan.outputs.template_repo }}
+  repo_topics_json:
+    value: ${{ steps.plan.outputs.repo_topics_json }}
+  default_branch:
+    value: ${{ steps.plan.outputs.default_branch }}
+  visibility:
+    value: ${{ steps.plan.outputs.visibility }}
+  auto_init:
+    value: ${{ steps.plan.outputs.auto_init }}
+
+runs:
+  using: composite
+  steps:
+    - id: plan
+      shell: bash
+      env:
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        REPO_TYPE_INPUT: ${{ inputs.repo_type }}
+        VISIBILITY_INPUT: ${{ inputs.visibility }}
+        DESCRIPTION_INPUT: ${{ inputs.description }}
+      run: |
+        set -euo pipefail
+
+        repo_name="$REPO_NAME_INPUT"
+        repo_type="$REPO_TYPE_INPUT"
+        visibility="$VISIBILITY_INPUT"
+        description="$DESCRIPTION_INPUT"
+
+        default_branch="main"
+        auto_init="false"
+        template_repo=""
+        topics_json='[]'
+
+        if [[ -z "$description" ]]; then
+          case "$repo_type" in
+            terraform) description="Terraform infrastructure repository for $repo_name" ;;
+            app) description="Application repository for $repo_name" ;;
+            library) description="Reusable library repository for $repo_name" ;;
+            image) description="Container image build repository for $repo_name" ;;
+            docker) description="Docker build repository for $repo_name" ;;
+            helm) description="Helm chart repository for $repo_name" ;;
+            configuration) description="Configuration repository for $repo_name" ;;
+            cicd) description="CI/CD automation repository for $repo_name" ;;
+          esac
+        fi
+
+        case "$repo_type" in
+          terraform)
+            template_repo="secure-templates/template-terraform"
+            topics_json='["terraform","infrastructure","iac"]'
+            ;;
+          app)
+            template_repo="secure-templates/template-app"
+            topics_json='["application","secure-baseline"]'
+            ;;
+          library)
+            template_repo="secure-templates/template-library"
+            topics_json='["library","secure-baseline"]'
+            ;;
+          image|docker)
+            template_repo="secure-templates/template-image"
+            topics_json='["container","supply-chain","secure-baseline"]'
+            ;;
+          helm)
+            template_repo="secure-templates/template-helm"
+            topics_json='["helm","kubernetes","secure-baseline"]'
+            ;;
+          configuration)
+            template_repo="secure-templates/template-configuration"
+            topics_json='["configuration","secure-baseline"]'
+            ;;
+          cicd)
+            template_repo="secure-templates/template-cicd"
+            topics_json='["github-actions","devsecops","secure-baseline"]'
+            ;;
+        esac
+
+        echo "description=$description" >> "$GITHUB_OUTPUT"
+        echo "template_repo=$template_repo" >> "$GITHUB_OUTPUT"
+        echo "repo_topics_json=$topics_json" >> "$GITHUB_OUTPUT"
+        echo "default_branch=$default_branch" >> "$GITHUB_OUTPUT"
+        echo "visibility=$visibility" >> "$GITHUB_OUTPUT"
+        echo "auto_init=$auto_init" >> "$GITHUB_OUTPUT"

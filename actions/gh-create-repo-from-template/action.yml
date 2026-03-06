@@ -1,0 +1,115 @@
+name: Create repository from template
+description: Create a new repository from a secure template in GitHub Cloud or GHES
+
+inputs:
+  github_host:
+    required: true
+    default: "github.com"
+  org:
+    required: true
+  repo_name:
+    required: true
+  description:
+    required: true
+  visibility:
+    required: true
+  template_repo:
+    required: true
+  default_branch:
+    required: true
+  auto_init:
+    required: false
+    default: "false"
+  github_token:
+    required: true
+
+outputs:
+  full_name:
+    value: ${{ steps.create.outputs.full_name }}
+  html_url:
+    value: ${{ steps.create.outputs.html_url }}
+  repo_id:
+    value: ${{ steps.create.outputs.repo_id }}
+
+runs:
+  using: composite
+  steps:
+    - id: create
+      shell: bash
+      env:
+        GH_HOST_INPUT: ${{ inputs.github_host }}
+        TOKEN_INPUT: ${{ inputs.github_token }}
+        ORG_INPUT: ${{ inputs.org }}
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        DESCRIPTION_INPUT: ${{ inputs.description }}
+        VISIBILITY_INPUT: ${{ inputs.visibility }}
+        TEMPLATE_REPO_INPUT: ${{ inputs.template_repo }}
+        DEFAULT_BRANCH_INPUT: ${{ inputs.default_branch }}
+      run: |
+        set -euo pipefail
+
+        command -v gh >/dev/null 2>&1 || { echo "ERROR: gh is required"; exit 1; }
+        command -v jq >/dev/null 2>&1 || { echo "ERROR: jq is required"; exit 1; }
+
+        if [[ "$GH_HOST_INPUT" == "github.com" ]]; then
+          export GH_TOKEN="$TOKEN_INPUT"
+        else
+          export GH_ENTERPRISE_TOKEN="$TOKEN_INPUT"
+          export GH_HOST="$GH_HOST_INPUT"
+        fi
+
+        template_owner="${TEMPLATE_REPO_INPUT%%/*}"
+        template_name="${TEMPLATE_REPO_INPUT##*/}"
+
+        private="true"
+        visibility="$VISIBILITY_INPUT"
+        case "$VISIBILITY_INPUT" in
+          private) private="true" ;;
+          public) private="false" ;;
+          internal) private="false" ;;
+          *)
+            echo "ERROR: invalid visibility '$VISIBILITY_INPUT'"
+            exit 1
+            ;;
+        esac
+
+        payload="$(jq -c -n \
+          --arg owner "$ORG_INPUT" \
+          --arg name "$REPO_NAME_INPUT" \
+          --arg description "$DESCRIPTION_INPUT" \
+          --arg visibility "$visibility" \
+          --argjson private "$private" \
+          '
+          {
+            owner: $owner,
+            name: $name,
+            description: $description,
+            private: $private,
+            visibility: $visibility,
+            include_all_branches: false
+          }
+          ')"
+
+        tmp="$(mktemp)"
+        printf '%s' "$payload" > "$tmp"
+
+        resp="$(gh api \
+          --hostname "$GH_HOST_INPUT" \
+          -H "Accept: application/vnd.github+json" \
+          -X POST \
+          --input "$tmp" \
+          "/repos/${template_owner}/${template_name}/generate")"
+
+        full_name="$(jq -r '.full_name' <<< "$resp")"
+        html_url="$(jq -r '.html_url' <<< "$resp")"
+        repo_id="$(jq -r '.id' <<< "$resp")"
+
+        if [[ -z "$full_name" || "$full_name" == "null" ]]; then
+          echo "ERROR: repo creation from template failed"
+          echo "$resp" | jq .
+          exit 1
+        fi
+
+        echo "full_name=$full_name" >> "$GITHUB_OUTPUT"
+        echo "html_url=$html_url" >> "$GITHUB_OUTPUT"
+        echo "repo_id=$repo_id" >> "$GITHUB_OUTPUT"

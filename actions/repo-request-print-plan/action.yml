@@ -1,0 +1,50 @@
+name: Print repository request plan
+description: Print a normalized repository creation plan
+
+inputs:
+  org:
+    required: true
+  github_host:
+    required: true
+  repo_name:
+    required: true
+  repo_type:
+    required: true
+  template_repo:
+    required: true
+  visibility:
+    required: true
+  default_branch:
+    required: true
+  description:
+    required: true
+  repo_topics_json:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        ORG_INPUT: ${{ inputs.org }}
+        GITHUB_HOST_INPUT: ${{ inputs.github_host }}
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        REPO_TYPE_INPUT: ${{ inputs.repo_type }}
+        TEMPLATE_REPO_INPUT: ${{ inputs.template_repo }}
+        VISIBILITY_INPUT: ${{ inputs.visibility }}
+        DEFAULT_BRANCH_INPUT: ${{ inputs.default_branch }}
+        DESCRIPTION_INPUT: ${{ inputs.description }}
+        TOPICS_JSON_INPUT: ${{ inputs.repo_topics_json }}
+      run: |
+        set -euo pipefail
+
+        echo "Repository request plan"
+        echo "  Host:           $GITHUB_HOST_INPUT"
+        echo "  Org:            $ORG_INPUT"
+        echo "  Repo name:      $REPO_NAME_INPUT"
+        echo "  Repo type:      $REPO_TYPE_INPUT"
+        echo "  Visibility:     $VISIBILITY_INPUT"
+        echo "  Default branch: $DEFAULT_BRANCH_INPUT"
+        echo "  Template repo:  $TEMPLATE_REPO_INPUT"
+        echo "  Description:    $DESCRIPTION_INPUT"
+        echo "  Topics:         $(echo "$TOPICS_JSON_INPUT" | jq -cr '.')"

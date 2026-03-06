@@ -1,0 +1,70 @@
+name: Configure new repository
+description: Apply baseline metadata to a newly created repository
+
+inputs:
+  github_host:
+    required: true
+    default: "github.com"
+  org:
+    required: true
+  repo_name:
+    required: true
+  topics_json:
+    required: true
+  default_branch:
+    required: true
+  github_token:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_HOST_INPUT: ${{ inputs.github_host }}
+        TOKEN_INPUT: ${{ inputs.github_token }}
+        ORG_INPUT: ${{ inputs.org }}
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        TOPICS_JSON_INPUT: ${{ inputs.topics_json }}
+        DEFAULT_BRANCH_INPUT: ${{ inputs.default_branch }}
+      run: |
+        set -euo pipefail
+
+        command -v gh >/dev/null 2>&1 || { echo "ERROR: gh is required"; exit 1; }
+        command -v jq >/dev/null 2>&1 || { echo "ERROR: jq is required"; exit 1; }
+
+        if [[ "$GH_HOST_INPUT" == "github.com" ]]; then
+          export GH_TOKEN="$TOKEN_INPUT"
+        else
+          export GH_ENTERPRISE_TOKEN="$TOKEN_INPUT"
+          export GH_HOST="$GH_HOST_INPUT"
+        fi
+
+        repo="${ORG_INPUT}/${REPO_NAME_INPUT}"
+
+        payload="$(jq -c -n \
+          --argjson names "$TOPICS_JSON_INPUT" \
+          '{ names: $names }'
+        )"
+
+        tmp="$(mktemp)"
+        printf '%s' "$payload" > "$tmp"
+
+        gh api \
+          --hostname "$GH_HOST_INPUT" \
+          -H "Accept: application/vnd.github+json" \
+          -X PUT \
+          --input "$tmp" \
+          "/repos/${repo}/topics" >/dev/null
+
+        gh api \
+          --hostname "$GH_HOST_INPUT" \
+          -H "Accept: application/vnd.github+json" \
+          -X PATCH \
+          "/repos/${repo}" \
+          -f delete_branch_on_merge=true \
+          -f allow_merge_commit=false \
+          -f allow_rebase_merge=true \
+          -f allow_squash_merge=true >/dev/null
+
+        echo "Configured repository metadata for ${repo}"
