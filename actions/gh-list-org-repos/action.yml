@@ -1,0 +1,56 @@
+name: List org repos
+description: List all repositories in a GitHub organization
+
+inputs:
+  github_host:
+    required: true
+  org:
+    required: true
+  github_token:
+    required: true
+
+outputs:
+  repos_json:
+    description: "JSON array of repository names"
+    value: ${{ steps.out.outputs.repos_json }}
+
+runs:
+  using: composite
+  steps:
+    - id: out
+      shell: bash
+      env:
+        GITHUB_HOST_INPUT: ${{ inputs.github_host }}
+        GITHUB_TOKEN_INPUT: ${{ inputs.github_token }}
+        ORG_INPUT: ${{ inputs.org }}
+      run: |
+        set -euo pipefail
+
+        if [[ "$GITHUB_HOST_INPUT" == "github.com" ]]; then
+          export GH_TOKEN="$GITHUB_TOKEN_INPUT"
+        else
+          export GH_ENTERPRISE_TOKEN="$GITHUB_TOKEN_INPUT"
+          export GH_HOST="$GITHUB_HOST_INPUT"
+        fi
+
+        page=1
+        names='[]'
+
+        while true; do
+          resp="$(gh api \
+            --hostname "$GITHUB_HOST_INPUT" \
+            -H "Accept: application/vnd.github+json" \
+            "/orgs/${ORG_INPUT}/repos?per_page=100&page=${page}")"
+
+          count="$(jq 'length' <<< "$resp")"
+          if [[ "$count" -eq 0 ]]; then
+            break
+          fi
+
+          batch="$(jq -c '[.[].name]' <<< "$resp")"
+          names="$(jq -c --argjson a "$names" --argjson b "$batch" '$a + $b' <<< 'null')"
+          page=$((page+1))
+        done
+
+        names="$(jq -c 'unique' <<< "$names")"
+        echo "repos_json=$names" >> "$GITHUB_OUTPUT"

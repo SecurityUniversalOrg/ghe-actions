@@ -1,0 +1,94 @@
+name: Sync org ruleset repo targets
+description: Ensure ruleset repository_name.include contains the desired repos
+
+inputs:
+  github_host:
+    required: true
+  org:
+    required: true
+  ruleset_id:
+    required: true
+  mode:
+    required: true
+  dry_run:
+    required: true
+  target_repos_json:
+    required: true
+  github_token:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GITHUB_HOST_INPUT: ${{ inputs.github_host }}
+        GITHUB_TOKEN_INPUT: ${{ inputs.github_token }}
+        ORG_INPUT: ${{ inputs.org }}
+        RULESET_ID_INPUT: ${{ inputs.ruleset_id }}
+        MODE_INPUT: ${{ inputs.mode }}
+        DRY_RUN_INPUT: ${{ inputs.dry_run }}
+        TARGET_REPOS_JSON_INPUT: ${{ inputs.target_repos_json }}
+      run: |
+        set -euo pipefail
+
+        if [[ "$GITHUB_HOST_INPUT" == "github.com" ]]; then
+          export GH_TOKEN="$GITHUB_TOKEN_INPUT"
+        else
+          export GH_ENTERPRISE_TOKEN="$GITHUB_TOKEN_INPUT"
+          export GH_HOST="$GITHUB_HOST_INPUT"
+        fi
+
+        if [[ "$MODE_INPUT" != "union" && "$MODE_INPUT" != "exact" ]]; then
+          echo "Invalid mode: $MODE_INPUT"
+          exit 1
+        fi
+
+        ruleset="$(gh api \
+          --hostname "$GITHUB_HOST_INPUT" \
+          -H "Accept: application/vnd.github+json" \
+          "/orgs/${ORG_INPUT}/rulesets/${RULESET_ID_INPUT}")"
+
+        current_includes="$(jq -c '.conditions.repository_name.include // []' <<< "$ruleset")"
+
+        if [[ "$MODE_INPUT" == "union" ]]; then
+          new_includes="$(jq -c --argjson a "$current_includes" --argjson b "$TARGET_REPOS_JSON_INPUT" '$a + $b | unique' <<< 'null')"
+        else
+          new_includes="$(jq -c --argjson b "$TARGET_REPOS_JSON_INPUT" '$b | unique' <<< 'null')"
+        fi
+
+        payload="$(jq -c \
+          --argjson inc "$new_includes" \
+          '
+          {
+            name: .name,
+            target: .target,
+            enforcement: .enforcement,
+            bypass_actors: (.bypass_actors // []),
+            conditions: ((.conditions // {}) + {
+              repository_name: ((.conditions.repository_name // {}) + { include: $inc })
+            }),
+            rules: (.rules // [])
+          }
+          ' <<< "$ruleset")"
+
+        echo "Current include count: $(jq -r 'length' <<< "$current_includes")"
+        echo "New include count: $(jq -r 'length' <<< "$new_includes")"
+        echo "Dry run: $DRY_RUN_INPUT"
+
+        if [[ "$DRY_RUN_INPUT" == "true" ]]; then
+          echo "$payload" | jq .
+          exit 0
+        fi
+
+        payload_file="$(mktemp)"
+        printf '%s' "$payload" > "$payload_file"
+
+        gh api \
+          --hostname "$GITHUB_HOST_INPUT" \
+          -X PATCH \
+          -H "Accept: application/vnd.github+json" \
+          --input "$payload_file" \
+          "/orgs/${ORG_INPUT}/rulesets/${RULESET_ID_INPUT}"
+
+        echo "Ruleset updated successfully"

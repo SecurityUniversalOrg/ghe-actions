@@ -1,0 +1,35 @@
+name: Preflight gh/jq and auth
+description: Ensure gh + jq are available and auth works for the target GitHub host
+
+inputs:
+  github_host:
+    required: true
+  github_token:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GITHUB_HOST_INPUT: ${{ inputs.github_host }}
+        GITHUB_TOKEN_INPUT: ${{ inputs.github_token }}
+      run: |
+        set -euo pipefail
+
+        command -v gh >/dev/null 2>&1 || { echo "gh is required but not found"; exit 1; }
+        command -v jq >/dev/null 2>&1 || { echo "jq is required but not found"; exit 1; }
+
+        if [[ "$GITHUB_HOST_INPUT" == "github.com" ]]; then
+          export GH_TOKEN="$GITHUB_TOKEN_INPUT"
+        else
+          export GH_ENTERPRISE_TOKEN="$GITHUB_TOKEN_INPUT"
+          export GH_HOST="$GITHUB_HOST_INPUT"
+        fi
+
+        gh auth status --hostname "$GITHUB_HOST_INPUT" >/dev/null 2>&1 || {
+          echo "Authentication failed for host: $GITHUB_HOST_INPUT"
+          exit 1
+        }
+
+        echo "Preflight OK for host: $GITHUB_HOST_INPUT"

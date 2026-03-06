@@ -1,0 +1,31 @@
+name: Filter repos by prefix
+description: Filter a JSON array of repo names by prefix
+
+inputs:
+  repos_json:
+    required: true
+  prefix:
+    required: true
+
+outputs:
+  matched_repos_json:
+    value: ${{ steps.out.outputs.matched_repos_json }}
+  matched_count:
+    value: ${{ steps.out.outputs.matched_count }}
+
+runs:
+  using: composite
+  steps:
+    - id: out
+      shell: bash
+      env:
+        REPOS_JSON_INPUT: ${{ inputs.repos_json }}
+        PREFIX_INPUT: ${{ inputs.prefix }}
+      run: |
+        set -euo pipefail
+
+        matched="$(jq -c --arg p "$PREFIX_INPUT" '[ .[] | select(startswith($p)) ]' <<< "$REPOS_JSON_INPUT")"
+        count="$(jq -r 'length' <<< "$matched")"
+
+        echo "matched_repos_json=$matched" >> "$GITHUB_OUTPUT"
+        echo "matched_count=$count" >> "$GITHUB_OUTPUT"
