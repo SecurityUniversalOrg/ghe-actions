@@ -93,49 +93,49 @@ runs:
 
         case "$repo_type" in
           terraform)
-            template_repo="secure-templates/template-terraform"
+            template_repo="SecurityUniversalOrg/template-terraform"
             topics_json='["terraform","infrastructure","iac"]'
             write_teams_json='["terraform-engineering","devsecops-engineering"]'
             read_teams_json='["github-auditors","cloud-security-reviewers"]'
             ruleset_names_json='["global-repository-baseline","terraform-repository-baseline"]'
             ;;
           app)
-            template_repo="secure-templates/template-app"
+            template_repo="SecurityUniversalOrg/template-app"
             topics_json='["application","secure-baseline"]'
             write_teams_json='["app-engineering","devsecops-engineering"]'
             read_teams_json='["github-auditors","appsec-reviewers"]'
             ruleset_names_json='["global-repository-baseline","application-repository-baseline"]'
             ;;
           library)
-            template_repo="secure-templates/template-library"
+            template_repo="SecurityUniversalOrg/template-library"
             topics_json='["library","secure-baseline"]'
             write_teams_json='["shared-services-engineering","devsecops-engineering"]'
             read_teams_json='["github-auditors","appsec-reviewers"]'
             ruleset_names_json='["global-repository-baseline","library-repository-baseline"]'
             ;;
           image|docker)
-            template_repo="secure-templates/template-image"
+            template_repo="SecurityUniversalOrg/template-image"
             topics_json='["container","supply-chain","secure-baseline"]'
             write_teams_json='["platform-images","devsecops-engineering"]'
             read_teams_json='["github-auditors","container-security-reviewers"]'
             ruleset_names_json='["global-repository-baseline","container-repository-baseline"]'
             ;;
           helm)
-            template_repo="secure-templates/template-helm"
+            template_repo="SecurityUniversalOrg/template-helm"
             topics_json='["helm","kubernetes","secure-baseline"]'
             write_teams_json='["platform-engineering","devsecops-engineering"]'
             read_teams_json='["github-auditors","platform-security-reviewers"]'
             ruleset_names_json='["global-repository-baseline","helm-repository-baseline"]'
             ;;
           configuration)
-            template_repo="secure-templates/template-configuration"
+            template_repo="SecurityUniversalOrg/template-configuration"
             topics_json='["configuration","secure-baseline"]'
             write_teams_json='["platform-engineering","operations-engineering"]'
             read_teams_json='["github-auditors","platform-security-reviewers"]'
             ruleset_names_json='["global-repository-baseline","configuration-repository-baseline"]'
             ;;
           cicd)
-            template_repo="secure-templates/template-cicd"
+            template_repo="SecurityUniversalOrg/template-cicd"
             topics_json='["github-actions","devsecops","secure-baseline"]'
             write_teams_json='["devsecops-engineering","platform-engineering"]'
             read_teams_json='["github-auditors","appsec-reviewers"]'
