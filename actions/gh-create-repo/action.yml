@@ -198,7 +198,7 @@ runs:
 
         # Build JSON payload
         payload="$(jq -c -n \
-          --arg name "$REPO_NAME_TRIMMED" \
+          --arg name "$REPO_NAME_INPUT" \
           --arg description "$DESC_INPUT" \
           --arg homepage "$HOME_INPUT" \
           --arg visibility "$visibility" \
