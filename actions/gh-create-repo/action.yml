@@ -132,7 +132,7 @@ runs:
         TOKEN_INPUT: ${{ inputs.github_token }}
 
         ORG_INPUT: ${{ inputs.org }}
-        NAME_INPUT: ${{ inputs.repo_name }}
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
         DESC_INPUT: ${{ inputs.description }}
         VIS_INPUT: ${{ inputs.visibility }}
         HOME_INPUT: ${{ inputs.homepage }}
@@ -160,7 +160,7 @@ runs:
         fi
 
         # Validate inputs
-        if [[ -z "$NAME_INPUT" ]]; then
+        if [[ -z "$REPO_NAME_INPUT" ]]; then
           echo "ERROR: inputs.name is required"
           exit 1
         fi
@@ -193,9 +193,12 @@ runs:
           endpoint="/user/repos"
         fi
 
+        # Validate inputs (and make the failure obvious in logs)
+        echo "DEBUG: org='${ORG_INPUT}', repo_name='${REPO_NAME_INPUT}', host='${GH_HOST_INPUT}'"
+
         # Build JSON payload
         payload="$(jq -c -n \
-          --arg name "$NAME_INPUT" \
+          --arg name "$REPO_NAME_INPUT" \
           --arg description "$DESC_INPUT" \
           --arg homepage "$HOME_INPUT" \
           --arg visibility "$visibility" \
