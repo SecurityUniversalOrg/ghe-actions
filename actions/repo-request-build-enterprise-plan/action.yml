@@ -43,6 +43,8 @@ outputs:
     value: ${{ steps.plan.outputs.enable_dependabot_security_updates }}
   enable_private_vulnerability_reporting:
     value: ${{ steps.plan.outputs.enable_private_vulnerability_reporting }}
+  runner_group_names_json: 
+    value: ${{ steps.plan.outputs.runner_group_names_json }}
 
 runs:
   using: composite
