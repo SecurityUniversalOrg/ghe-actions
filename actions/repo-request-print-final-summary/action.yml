@@ -28,6 +28,8 @@ inputs:
     required: true
   ruleset_names_json:
     required: true
+  runner_group_names_json:
+    required: true
 
 runs:
   using: composite
@@ -47,6 +49,7 @@ runs:
         WRITE_TEAMS_JSON_INPUT: ${{ inputs.write_teams_json }}
         READ_TEAMS_JSON_INPUT: ${{ inputs.read_teams_json }}
         RULESET_NAMES_JSON_INPUT: ${{ inputs.ruleset_names_json }}
+        RUNNER_GROUP_NAMES_JSON_INPUT: ${{ inputs.runner_group_names_json }}
       run: |
         set -euo pipefail
 
@@ -64,3 +67,4 @@ runs:
         echo "  Write teams:     $(echo "$WRITE_TEAMS_JSON_INPUT" | jq -cr '.')"
         echo "  Read teams:      $(echo "$READ_TEAMS_JSON_INPUT" | jq -cr '.')"
         echo "  Rulesets:        $(echo "$RULESET_NAMES_JSON_INPUT" | jq -cr '.')"
+        echo "  Runner groups:   $(echo "$RUNNER_GROUP_NAMES_JSON_INPUT" | jq -cr '.')"
