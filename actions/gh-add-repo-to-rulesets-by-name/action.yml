@@ -82,7 +82,7 @@ runs:
 
           gh api \
             --hostname "$GH_HOST_INPUT" \
-            -X PATCH \
+            -X PUT \
             -H "Accept: application/vnd.github+json" \
             --input "$tmp" \
             "/orgs/${ORG_INPUT}/rulesets/${ruleset_id}" >/dev/null
