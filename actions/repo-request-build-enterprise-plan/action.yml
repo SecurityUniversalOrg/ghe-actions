@@ -143,6 +143,23 @@ runs:
             ;;
         esac
 
+        runner_group_names_json='[]'
+
+        case "$repo_type" in
+          terraform)
+            runner_group_names_json='["terraform-runners","shared-linux"]'
+            ;;
+          app|library)
+            runner_group_names_json='["app-builders","shared-linux"]'
+            ;;
+          image|docker)
+            runner_group_names_json='["container-builders","shared-linux"]'
+            ;;
+          helm|configuration|cicd)
+            runner_group_names_json='["platform-runners","shared-linux"]'
+            ;;
+        esac
+
         echo "description=$description" >> "$GITHUB_OUTPUT"
         echo "template_repo=$template_repo" >> "$GITHUB_OUTPUT"
         echo "repo_topics_json=$topics_json" >> "$GITHUB_OUTPUT"
@@ -158,3 +175,4 @@ runs:
         echo "enable_dependabot_alerts=$enable_dependabot_alerts" >> "$GITHUB_OUTPUT"
         echo "enable_dependabot_security_updates=$enable_dependabot_security_updates" >> "$GITHUB_OUTPUT"
         echo "enable_private_vulnerability_reporting=$enable_private_vulnerability_reporting" >> "$GITHUB_OUTPUT"
+        echo "runner_group_names_json=$runner_group_names_json" >> "$GITHUB_OUTPUT"
