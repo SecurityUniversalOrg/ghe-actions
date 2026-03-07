@@ -149,16 +149,16 @@ runs:
 
         case "$repo_type" in
           terraform)
-            runner_group_names_json='["terraform-runners","shared-linux"]'
+            runner_group_names_json='["fed-testing"]'
             ;;
           app|library)
-            runner_group_names_json='["app-builders","shared-linux"]'
+            runner_group_names_json='["fed-testing"]'
             ;;
           image|docker)
-            runner_group_names_json='["container-builders","shared-linux"]'
+            runner_group_names_json='["fed-testing"]'
             ;;
           helm|configuration|cicd)
-            runner_group_names_json='["platform-runners","shared-linux"]'
+            runner_group_names_json='["fed-testing"]'
             ;;
         esac
 
