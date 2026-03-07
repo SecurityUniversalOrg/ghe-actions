@@ -1,0 +1,141 @@
+name: Add repository to runner groups
+description: Add a repository to one or more organization runner groups by name or ID
+
+inputs:
+  github_host:
+    description: "GitHub host (github.com or GHES hostname)"
+    required: false
+    default: "github.com"
+
+  org:
+    description: "Target organization"
+    required: true
+
+  repo_name:
+    description: "Repository name, without owner prefix"
+    required: true
+
+  # One of these should be provided.
+  runner_group_names_json:
+    description: 'JSON array of runner group names, e.g. ["terraform-runners","shared-linux"]'
+    required: false
+    default: "[]"
+
+  runner_group_ids_json:
+    description: 'JSON array of runner group IDs, e.g. [12,34]'
+    required: false
+    default: "[]"
+
+  github_token:
+    description: "Token with org self-hosted runner write and repo metadata read"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_HOST_INPUT: ${{ inputs.github_host }}
+        TOKEN_INPUT: ${{ inputs.github_token }}
+        ORG_INPUT: ${{ inputs.org }}
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        RUNNER_GROUP_NAMES_JSON_INPUT: ${{ inputs.runner_group_names_json }}
+        RUNNER_GROUP_IDS_JSON_INPUT: ${{ inputs.runner_group_ids_json }}
+      run: |
+        set -euo pipefail
+
+        command -v gh >/dev/null 2>&1 || { echo "ERROR: gh is required"; exit 1; }
+        command -v jq >/dev/null 2>&1 || { echo "ERROR: jq is required"; exit 1; }
+
+        if [[ "$GH_HOST_INPUT" == "github.com" ]]; then
+          export GH_TOKEN="$TOKEN_INPUT"
+        else
+          export GH_ENTERPRISE_TOKEN="$TOKEN_INPUT"
+          export GH_HOST="$GH_HOST_INPUT"
+        fi
+
+        repo="${ORG_INPUT}/${REPO_NAME_INPUT}"
+
+        echo "DEBUG: validating repo access for ${repo}"
+        repo_json="$(gh api \
+          --hostname "$GH_HOST_INPUT" \
+          -H "Accept: application/vnd.github+json" \
+          "/repos/${repo}")"
+
+        repository_id="$(jq -r '.id' <<< "$repo_json")"
+        if [[ -z "$repository_id" || "$repository_id" == "null" ]]; then
+          echo "ERROR: unable to resolve repository id for ${repo}"
+          exit 1
+        fi
+
+        echo "DEBUG: repository_id=${repository_id}"
+
+        echo "DEBUG: validating runner group access for org ${ORG_INPUT}"
+        runner_groups_json="$(gh api \
+          --hostname "$GH_HOST_INPUT" \
+          -H "Accept: application/vnd.github+json" \
+          "/orgs/${ORG_INPUT}/actions/runner-groups")"
+
+        # Build a unique list of runner group IDs from explicit IDs + resolved names.
+        resolved_ids='[]'
+
+        # Add explicit IDs first.
+        resolved_ids="$(jq -c --argjson ids "$RUNNER_GROUP_IDS_JSON_INPUT" '$ids | unique' <<< 'null')"
+
+        # Resolve names to IDs.
+        while IFS= read -r group_name; do
+          [[ -z "$group_name" ]] && continue
+
+          group_json="$(echo "$runner_groups_json" | jq -c --arg name "$group_name" '.runner_groups[] | select(.name == $name)' | head -n 1)"
+          if [[ -z "$group_json" ]]; then
+            echo "ERROR: runner group '${group_name}' not found in org '${ORG_INPUT}'"
+            exit 1
+          fi
+
+          group_id="$(jq -r '.id' <<< "$group_json")"
+          visibility="$(jq -r '.visibility // "unknown"' <<< "$group_json")"
+
+          if [[ "$visibility" != "selected" ]]; then
+            echo "ERROR: runner group '${group_name}' (id=${group_id}) has visibility '${visibility}', not 'selected'."
+            echo "This API only works for runner groups with selected repository access."
+            exit 1
+          fi
+
+          resolved_ids="$(jq -c --argjson current "$resolved_ids" --argjson id "$group_id" '$current + [$id] | unique' <<< 'null')"
+        done < <(echo "$RUNNER_GROUP_NAMES_JSON_INPUT" | jq -r '.[]')
+
+        count="$(jq -r 'length' <<< "$resolved_ids")"
+        if [[ "$count" -eq 0 ]]; then
+          echo "ERROR: no runner groups were provided. Supply runner_group_names_json and/or runner_group_ids_json."
+          exit 1
+        fi
+
+        while IFS= read -r group_id; do
+          [[ -z "$group_id" ]] && continue
+
+          group_json="$(echo "$runner_groups_json" | jq -c --argjson gid "$group_id" '.runner_groups[] | select(.id == $gid)' | head -n 1)"
+          if [[ -z "$group_json" ]]; then
+            echo "ERROR: runner group id '${group_id}' not found in org '${ORG_INPUT}'"
+            exit 1
+          fi
+
+          group_name="$(jq -r '.name' <<< "$group_json")"
+          visibility="$(jq -r '.visibility // "unknown"' <<< "$group_json")"
+
+          if [[ "$visibility" != "selected" ]]; then
+            echo "ERROR: runner group '${group_name}' (id=${group_id}) has visibility '${visibility}', not 'selected'."
+            exit 1
+          fi
+
+          echo "Adding repo '${repo}' (repository_id=${repository_id}) to runner group '${group_name}' (id=${group_id})"
+
+          gh api \
+            --hostname "$GH_HOST_INPUT" \
+            -X PUT \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/orgs/${ORG_INPUT}/actions/runner-groups/${group_id}/repositories/${repository_id}" >/dev/null
+
+        done < <(echo "$resolved_ids" | jq -r '.[]')
+
+        echo "Successfully added ${repo} to the requested runner groups."
