@@ -244,6 +244,14 @@ runs:
             ;;
         esac
 
+        runner_group_names_json="$(echo "$runner_group_names_json" | jq -c '.')"
+        environments_json="$(echo "$environments_json" | jq -c '.')"
+        topics_json="$(echo "$topics_json" | jq -c '.')"
+        admin_teams_json="$(echo "$admin_teams_json" | jq -c '.')"
+        write_teams_json="$(echo "$write_teams_json" | jq -c '.')"
+        read_teams_json="$(echo "$read_teams_json" | jq -c '.')"
+        ruleset_names_json="$(echo "$ruleset_names_json" | jq -c '.')"
+
         echo "description=$description" >> "$GITHUB_OUTPUT"
         echo "template_repo=$template_repo" >> "$GITHUB_OUTPUT"
         echo "repo_topics_json=$topics_json" >> "$GITHUB_OUTPUT"
