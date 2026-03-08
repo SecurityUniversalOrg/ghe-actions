@@ -1,0 +1,218 @@
+name: Create or update repository environments
+description: Create or update one or more GitHub environments in a repository using a plan-driven JSON input
+
+inputs:
+  github_host:
+    description: "GitHub host (github.com or GHES hostname)"
+    required: false
+    default: "github.com"
+
+  org:
+    description: "Repository owner / organization"
+    required: true
+
+  repo_name:
+    description: "Repository name"
+    required: true
+
+  environments_json:
+    description: >
+      JSON array of environment objects.
+      Example:
+      [
+        {
+          "name":"dev",
+          "wait_timer":0,
+          "prevent_self_review":false,
+          "reviewer_team_slugs":["platform-engineering"],
+          "reviewer_user_logins":[],
+          "protected_branches":false,
+          "custom_branch_policies":false
+        }
+      ]
+    required: true
+
+  github_token:
+    description: "Token with repository Administration: write"
+    required: true
+
+outputs:
+  created_environments_json:
+    description: "JSON array summarizing created/updated environments"
+    value: ${{ steps.apply.outputs.created_environments_json }}
+
+runs:
+  using: composite
+  steps:
+    - id: apply
+      shell: bash
+      env:
+        GH_HOST_INPUT: ${{ inputs.github_host }}
+        TOKEN_INPUT: ${{ inputs.github_token }}
+        ORG_INPUT: ${{ inputs.org }}
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        ENVIRONMENTS_JSON_INPUT: ${{ inputs.environments_json }}
+      run: |
+        set -euo pipefail
+
+        command -v gh >/dev/null 2>&1 || { echo "ERROR: gh is required"; exit 1; }
+        command -v jq >/dev/null 2>&1 || { echo "ERROR: jq is required"; exit 1; }
+
+        if [[ "$GH_HOST_INPUT" == "github.com" ]]; then
+          export GH_TOKEN="$TOKEN_INPUT"
+        else
+          export GH_ENTERPRISE_TOKEN="$TOKEN_INPUT"
+          export GH_HOST="$GH_HOST_INPUT"
+        fi
+
+        repo="${ORG_INPUT}/${REPO_NAME_INPUT}"
+
+        # Validate repo access first
+        gh api \
+          --hostname "$GH_HOST_INPUT" \
+          -H "Accept: application/vnd.github+json" \
+          "/repos/${repo}" >/dev/null
+
+        # Validate environments_json structure
+        echo "$ENVIRONMENTS_JSON_INPUT" | jq -e 'if type=="array" then . else empty end' >/dev/null || {
+          echo "ERROR: environments_json must be a JSON array"
+          exit 1
+        }
+
+        created='[]'
+        count="$(echo "$ENVIRONMENTS_JSON_INPUT" | jq -r 'length')"
+
+        if [[ "$count" -eq 0 ]]; then
+          echo "ERROR: environments_json is empty"
+          exit 1
+        fi
+
+        for i in $(seq 0 $((count - 1))); do
+          env_obj="$(echo "$ENVIRONMENTS_JSON_INPUT" | jq -c ".[$i]")"
+
+          env_name="$(echo "$env_obj" | jq -r '.name')"
+          wait_timer="$(echo "$env_obj" | jq -r '.wait_timer // 0')"
+          prevent_self_review="$(echo "$env_obj" | jq -r '.prevent_self_review // true')"
+          protected_branches="$(echo "$env_obj" | jq -r '.protected_branches // false')"
+          custom_branch_policies="$(echo "$env_obj" | jq -r '.custom_branch_policies // false')"
+          reviewer_team_slugs='[]'
+          reviewer_user_logins='[]'
+
+          if echo "$env_obj" | jq -e '.reviewer_team_slugs' >/dev/null 2>&1; then
+            reviewer_team_slugs="$(echo "$env_obj" | jq -c '.reviewer_team_slugs')"
+          fi
+
+          if echo "$env_obj" | jq -e '.reviewer_user_logins' >/dev/null 2>&1; then
+            reviewer_user_logins="$(echo "$env_obj" | jq -c '.reviewer_user_logins')"
+          fi
+
+          if [[ -z "$env_name" || "$env_name" == "null" ]]; then
+            echo "ERROR: environment entry at index $i is missing 'name'"
+            exit 1
+          fi
+
+          if [[ "$protected_branches" == "$custom_branch_policies" ]]; then
+            echo "ERROR: environment '$env_name' has invalid branch policy flags."
+            echo "protected_branches and custom_branch_policies cannot be the same value."
+            exit 1
+          fi
+
+          reviewers_json='[]'
+
+          while IFS= read -r team_slug; do
+            [[ -z "$team_slug" ]] && continue
+
+            team_json="$(gh api \
+              --hostname "$GH_HOST_INPUT" \
+              -H "Accept: application/vnd.github+json" \
+              "/orgs/${ORG_INPUT}/teams/${team_slug}")"
+
+            team_id="$(echo "$team_json" | jq -r '.id')"
+            if [[ -z "$team_id" || "$team_id" == "null" ]]; then
+              echo "ERROR: unable to resolve team id for '${team_slug}'"
+              exit 1
+            fi
+
+            reviewers_json="$(jq -c \
+              --argjson current "$reviewers_json" \
+              --argjson tid "$team_id" \
+              '$current + [{"type":"Team","id":$tid}]' <<< 'null')"
+          done < <(echo "$reviewer_team_slugs" | jq -r '.[]')
+
+          while IFS= read -r user_login; do
+            [[ -z "$user_login" ]] && continue
+
+            user_json="$(gh api \
+              --hostname "$GH_HOST_INPUT" \
+              -H "Accept: application/vnd.github+json" \
+              "/users/${user_login}")"
+
+            user_id="$(echo "$user_json" | jq -r '.id')"
+            if [[ -z "$user_id" || "$user_id" == "null" ]]; then
+              echo "ERROR: unable to resolve user id for '${user_login}'"
+              exit 1
+            fi
+
+            reviewers_json="$(jq -c \
+              --argjson current "$reviewers_json" \
+              --argjson uid "$user_id" \
+              '$current + [{"type":"User","id":$uid}]' <<< 'null')"
+          done < <(echo "$reviewer_user_logins" | jq -r '.[]')
+
+          reviewer_count="$(echo "$reviewers_json" | jq -r 'length')"
+          if [[ "$reviewer_count" -gt 6 ]]; then
+            echo "ERROR: environment '$env_name' has ${reviewer_count} reviewers. GitHub allows up to 6."
+            exit 1
+          fi
+
+          env_name_encoded="$(jq -rn --arg v "$env_name" '$v|@uri')"
+
+          payload="$(jq -c -n \
+            --argjson wait_timer "$wait_timer" \
+            --argjson prevent_self_review "$prevent_self_review" \
+            --argjson reviewers "$reviewers_json" \
+            --argjson protected_branches "$protected_branches" \
+            --argjson custom_branch_policies "$custom_branch_policies" \
+            '{
+              wait_timer: $wait_timer,
+              prevent_self_review: $prevent_self_review,
+              reviewers: $reviewers,
+              deployment_branch_policy: {
+                protected_branches: $protected_branches,
+                custom_branch_policies: $custom_branch_policies
+              }
+            }'
+          )"
+
+          tmp="$(mktemp)"
+          printf '%s' "$payload" > "$tmp"
+
+          echo "Creating/updating environment '$env_name' on repo '$repo'"
+
+          resp="$(gh api \
+            --hostname "$GH_HOST_INPUT" \
+            -X PUT \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            --input "$tmp" \
+            "/repos/${repo}/environments/${env_name_encoded}")"
+
+          environment_id="$(echo "$resp" | jq -r '.id')"
+          environment_name="$(echo "$resp" | jq -r '.name')"
+          environment_url="$(echo "$resp" | jq -r '.url')"
+
+          if [[ -z "$environment_id" || "$environment_id" == "null" ]]; then
+            echo "ERROR: failed to create/update environment '$env_name'"
+            echo "$resp" | jq .
+            exit 1
+          fi
+
+          created="$(jq -c \
+            --argjson current "$created" \
+            --arg name "$environment_name" \
+            --arg id "$environment_id" \
+            --arg url "$environment_url" \
+            '$current + [{"name":$name,"id":$id,"url":$url}]' <<< 'null')"
+        done
+
+        echo "created_environments_json=$created" >> "$GITHUB_OUTPUT"

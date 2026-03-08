@@ -45,6 +45,8 @@ outputs:
     value: ${{ steps.plan.outputs.enable_private_vulnerability_reporting }}
   runner_group_names_json: 
     value: ${{ steps.plan.outputs.runner_group_names_json }}
+  environments_json:
+    value: ${{ steps.plan.outputs.environments_json }}
 
 runs:
   using: composite
@@ -162,6 +164,86 @@ runs:
             ;;
         esac
 
+        environments_json='[]'
+
+        case "$repo_type" in
+          terraform)
+            environments_json='[
+              {
+                "name": "dev",
+                "wait_timer": 0,
+                "prevent_self_review": false,
+                "reviewer_team_slugs": ["terraform-engineering"],
+                "reviewer_user_logins": [],
+                "protected_branches": false,
+                "custom_branch_policies": false
+              },
+              {
+                "name": "prod",
+                "wait_timer": 0,
+                "prevent_self_review": true,
+                "reviewer_team_slugs": ["github-platform-admins","cloud-security-reviewers"],
+                "reviewer_user_logins": [],
+                "protected_branches": true,
+                "custom_branch_policies": false
+              }
+            ]'
+            ;;
+          app|library)
+            environments_json='[
+              {
+                "name": "dev",
+                "wait_timer": 0,
+                "prevent_self_review": false,
+                "reviewer_team_slugs": ["app-engineering"],
+                "reviewer_user_logins": [],
+                "protected_branches": false,
+                "custom_branch_policies": false
+              },
+              {
+                "name": "test",
+                "wait_timer": 0,
+                "prevent_self_review": false,
+                "reviewer_team_slugs": ["appsec-reviewers"],
+                "reviewer_user_logins": [],
+                "protected_branches": false,
+                "custom_branch_policies": false
+              },
+              {
+                "name": "prod",
+                "wait_timer": 0,
+                "prevent_self_review": true,
+                "reviewer_team_slugs": ["github-platform-admins","security-approvers"],
+                "reviewer_user_logins": [],
+                "protected_branches": true,
+                "custom_branch_policies": false
+              }
+            ]'
+            ;;
+          cicd|configuration|helm|image|docker)
+            environments_json='[
+              {
+                "name": "nonprod",
+                "wait_timer": 0,
+                "prevent_self_review": false,
+                "reviewer_team_slugs": ["platform-engineering"],
+                "reviewer_user_logins": [],
+                "protected_branches": false,
+                "custom_branch_policies": false
+              },
+              {
+                "name": "prod",
+                "wait_timer": 0,
+                "prevent_self_review": true,
+                "reviewer_team_slugs": ["github-platform-admins","platform-security-reviewers"],
+                "reviewer_user_logins": [],
+                "protected_branches": true,
+                "custom_branch_policies": false
+              }
+            ]'
+            ;;
+        esac
+
         echo "description=$description" >> "$GITHUB_OUTPUT"
         echo "template_repo=$template_repo" >> "$GITHUB_OUTPUT"
         echo "repo_topics_json=$topics_json" >> "$GITHUB_OUTPUT"
@@ -178,3 +260,4 @@ runs:
         echo "enable_dependabot_security_updates=$enable_dependabot_security_updates" >> "$GITHUB_OUTPUT"
         echo "enable_private_vulnerability_reporting=$enable_private_vulnerability_reporting" >> "$GITHUB_OUTPUT"
         echo "runner_group_names_json=$runner_group_names_json" >> "$GITHUB_OUTPUT"
+        echo "environments_json=$environments_json" >> "$GITHUB_OUTPUT"
