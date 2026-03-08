@@ -111,9 +111,13 @@ runs:
             exit 1
           fi
 
-          if [[ "$protected_branches" == "$custom_branch_policies" ]]; then
-            echo "ERROR: environment '$env_name' has invalid branch policy flags."
-            echo "protected_branches and custom_branch_policies cannot be the same value."
+          # Valid combinations:
+          # false/false = no branch restriction
+          # true/false  = protected branches only
+          # false/true  = custom branch policies
+          # true/true   = invalid
+          if [[ "$protected_branches" == "true" && "$custom_branch_policies" == "true" ]]; then
+            echo "ERROR: environment '$env_name' cannot set both protected_branches=true and custom_branch_policies=true."
             exit 1
           fi
 
@@ -122,10 +126,21 @@ runs:
           while IFS= read -r team_slug; do
             [[ -z "$team_slug" ]] && continue
 
-            team_json="$(gh api \
+            echo "Resolving reviewer team slug '${team_slug}' in org '${ORG_INPUT}'"
+
+            if ! team_json="$(gh api \
               --hostname "$GH_HOST_INPUT" \
               -H "Accept: application/vnd.github+json" \
-              "/orgs/${ORG_INPUT}/teams/${team_slug}")"
+              "/orgs/${ORG_INPUT}/teams/${team_slug}" 2>/tmp/gh_team_err)"; then
+              echo "ERROR: could not resolve team slug '${team_slug}' in org '${ORG_INPUT}'."
+              echo "This usually means either:"
+              echo "  1) the team slug is wrong"
+              echo "  2) the token cannot read org teams"
+              echo "  3) the team exists under a different slug than the display name"
+              echo "GitHub error:"
+              cat /tmp/gh_team_err
+              exit 1
+            fi
 
             team_id="$(echo "$team_json" | jq -r '.id')"
             if [[ -z "$team_id" || "$team_id" == "null" ]]; then
