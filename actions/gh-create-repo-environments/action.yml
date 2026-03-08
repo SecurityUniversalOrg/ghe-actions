@@ -111,11 +111,11 @@ runs:
             exit 1
           fi
 
-          # Valid combinations:
-          # false/false = no branch restriction
-          # true/false  = protected branches only
-          # false/true  = custom branch policies
-          # true/true   = invalid
+          # GitHub environment API rules:
+          # - protected_branches=true,  custom_branch_policies=false  => protected branches only
+          # - protected_branches=false, custom_branch_policies=true   => custom branch policies
+          # - protected_branches=false, custom_branch_policies=false  => allow all branches, but only if deployment_branch_policy is null
+          # - protected_branches=true,  custom_branch_policies=true   => invalid
           if [[ "$protected_branches" == "true" && "$custom_branch_policies" == "true" ]]; then
             echo "ERROR: environment '$env_name' cannot set both protected_branches=true and custom_branch_policies=true."
             exit 1
@@ -182,27 +182,44 @@ runs:
 
           env_name_encoded="$(jq -rn --arg v "$env_name" '$v|@uri')"
 
-          payload="$(jq -c -n \
-            --argjson wait_timer "$wait_timer" \
-            --argjson prevent_self_review "$prevent_self_review" \
-            --argjson reviewers "$reviewers_json" \
-            --argjson protected_branches "$protected_branches" \
-            --argjson custom_branch_policies "$custom_branch_policies" \
-            '{
-              wait_timer: $wait_timer,
-              prevent_self_review: $prevent_self_review,
-              reviewers: $reviewers,
-              deployment_branch_policy: {
-                protected_branches: $protected_branches,
-                custom_branch_policies: $custom_branch_policies
-              }
-            }'
-          )"
+          if [[ "$protected_branches" == "false" && "$custom_branch_policies" == "false" ]]; then
+            # Allow all branches/tags: deployment_branch_policy must be null
+            payload="$(jq -c -n \
+              --argjson wait_timer "$wait_timer" \
+              --argjson prevent_self_review "$prevent_self_review" \
+              --argjson reviewers "$reviewers_json" \
+              '{
+                wait_timer: $wait_timer,
+                prevent_self_review: $prevent_self_review,
+                reviewers: $reviewers,
+                deployment_branch_policy: null
+              }'
+            )"
+          else
+            payload="$(jq -c -n \
+              --argjson wait_timer "$wait_timer" \
+              --argjson prevent_self_review "$prevent_self_review" \
+              --argjson reviewers "$reviewers_json" \
+              --argjson protected_branches "$protected_branches" \
+              --argjson custom_branch_policies "$custom_branch_policies" \
+              '{
+                wait_timer: $wait_timer,
+                prevent_self_review: $prevent_self_review,
+                reviewers: $reviewers,
+                deployment_branch_policy: {
+                  protected_branches: $protected_branches,
+                  custom_branch_policies: $custom_branch_policies
+                }
+              }'
+            )"
+          fi
 
           tmp="$(mktemp)"
           printf '%s' "$payload" > "$tmp"
 
           echo "Creating/updating environment '$env_name' on repo '$repo'"
+
+          echo "DEBUG: payload for '$env_name' = $payload"
 
           resp="$(gh api \
             --hostname "$GH_HOST_INPUT" \
