@@ -71,17 +71,6 @@ runs:
         template_repo=""
         topics_json='[]'
 
-        admin_teams_json='["github-platform-admins"]'
-        write_teams_json='[]'
-        read_teams_json='["github-auditors"]'
-        ruleset_names_json='["global-repository-baseline"]'
-
-        enable_secret_scanning="true"
-        enable_secret_scanning_push_protection="true"
-        enable_dependabot_alerts="true"
-        enable_dependabot_security_updates="true"
-        enable_private_vulnerability_reporting="true"
-
         if [[ -z "$description" ]]; then
           case "$repo_type" in
             terraform) description="Terraform infrastructure repository for $repo_name" ;;
@@ -94,6 +83,19 @@ runs:
             cicd) description="CI/CD automation repository for $repo_name" ;;
           esac
         fi
+        
+        enable_secret_scanning="true"
+        enable_secret_scanning_push_protection="true"
+        enable_dependabot_alerts="true"
+        enable_dependabot_security_updates="true"
+        enable_private_vulnerability_reporting="true"
+
+        admin_teams_json='["github-platform-admins"]'
+        write_teams_json='[]'
+        read_teams_json='["github-auditors"]'
+        ruleset_names_json='["global-repository-baseline"]'
+        runner_group_names_json='[]'
+        environments_json='[]'
 
         case "$repo_type" in
           terraform)
@@ -102,72 +104,7 @@ runs:
             write_teams_json='["terraform-engineering","devsecops-engineering"]'
             read_teams_json='["github-auditors","cloud-security-reviewers"]'
             ruleset_names_json='["global-repository-baseline","terraform-repository-baseline"]'
-            ;;
-          app)
-            template_repo="SecurityUniversalOrg/template-app"
-            topics_json='["application","secure-baseline"]'
-            write_teams_json='["app-engineering","devsecops-engineering"]'
-            read_teams_json='["github-auditors","appsec-reviewers"]'
-            ruleset_names_json='["global-repository-baseline","application-repository-baseline"]'
-            ;;
-          library)
-            template_repo="SecurityUniversalOrg/template-library"
-            topics_json='["library","secure-baseline"]'
-            write_teams_json='["shared-services-engineering","devsecops-engineering"]'
-            read_teams_json='["github-auditors","appsec-reviewers"]'
-            ruleset_names_json='["global-repository-baseline","library-repository-baseline"]'
-            ;;
-          image|docker)
-            template_repo="SecurityUniversalOrg/template-image"
-            topics_json='["container","supply-chain","secure-baseline"]'
-            write_teams_json='["platform-images","devsecops-engineering"]'
-            read_teams_json='["github-auditors","container-security-reviewers"]'
-            ruleset_names_json='["global-repository-baseline","container-repository-baseline"]'
-            ;;
-          helm)
-            template_repo="SecurityUniversalOrg/template-helm"
-            topics_json='["helm","kubernetes","secure-baseline"]'
-            write_teams_json='["platform-engineering","devsecops-engineering"]'
-            read_teams_json='["github-auditors","platform-security-reviewers"]'
-            ruleset_names_json='["global-repository-baseline","helm-repository-baseline"]'
-            ;;
-          configuration)
-            template_repo="SecurityUniversalOrg/template-configuration"
-            topics_json='["configuration","secure-baseline"]'
-            write_teams_json='["platform-engineering","operations-engineering"]'
-            read_teams_json='["github-auditors","platform-security-reviewers"]'
-            ruleset_names_json='["global-repository-baseline","configuration-repository-baseline"]'
-            ;;
-          cicd)
-            template_repo="SecurityUniversalOrg/template-cicd"
-            topics_json='["github-actions","devsecops","secure-baseline"]'
-            write_teams_json='["devsecops-engineering","platform-engineering"]'
-            read_teams_json='["github-auditors","appsec-reviewers"]'
-            ruleset_names_json='["global-repository-baseline","cicd-repository-baseline"]'
-            ;;
-        esac
-
-        runner_group_names_json='[]'
-
-        case "$repo_type" in
-          terraform)
             runner_group_names_json='["fed-testing"]'
-            ;;
-          app|library)
-            runner_group_names_json='["fed-testing"]'
-            ;;
-          image|docker)
-            runner_group_names_json='["fed-testing"]'
-            ;;
-          helm|configuration|cicd)
-            runner_group_names_json='["fed-testing"]'
-            ;;
-        esac
-
-        environments_json='[]'
-
-        case "$repo_type" in
-          terraform)
             environments_json='[
               {
                 "name": "dev",
@@ -189,7 +126,13 @@ runs:
               }
             ]'
             ;;
-          app|library)
+          app)
+            template_repo="SecurityUniversalOrg/template-app"
+            topics_json='["application","secure-baseline"]'
+            write_teams_json='["app-engineering","devsecops-engineering"]'
+            read_teams_json='["github-auditors","appsec-reviewers"]'
+            ruleset_names_json='["global-repository-baseline","application-repository-baseline"]'
+            runner_group_names_json='["fed-testing"]'
             environments_json='[
               {
                 "name": "dev",
@@ -220,7 +163,133 @@ runs:
               }
             ]'
             ;;
-          cicd|configuration|helm|image|docker)
+          library)
+            template_repo="SecurityUniversalOrg/template-library"
+            topics_json='["library","secure-baseline"]'
+            write_teams_json='["shared-services-engineering","devsecops-engineering"]'
+            read_teams_json='["github-auditors","appsec-reviewers"]'
+            ruleset_names_json='["global-repository-baseline","library-repository-baseline"]'
+            environments_json='[
+              {
+                "name": "dev",
+                "wait_timer": 0,
+                "prevent_self_review": false,
+                "reviewer_team_slugs": ["app-engineering"],
+                "reviewer_user_logins": [],
+                "protected_branches": false,
+                "custom_branch_policies": false
+              },
+              {
+                "name": "test",
+                "wait_timer": 0,
+                "prevent_self_review": false,
+                "reviewer_team_slugs": ["appsec-reviewers"],
+                "reviewer_user_logins": [],
+                "protected_branches": false,
+                "custom_branch_policies": false
+              },
+              {
+                "name": "prod",
+                "wait_timer": 0,
+                "prevent_self_review": true,
+                "reviewer_team_slugs": ["github-platform-admins","security-approvers"],
+                "reviewer_user_logins": [],
+                "protected_branches": true,
+                "custom_branch_policies": false
+              }
+            ]'
+            ;;
+          image|docker)
+            template_repo="SecurityUniversalOrg/template-image"
+            topics_json='["container","supply-chain","secure-baseline"]'
+            write_teams_json='["platform-images","devsecops-engineering"]'
+            read_teams_json='["github-auditors","container-security-reviewers"]'
+            ruleset_names_json='["global-repository-baseline","container-repository-baseline"]'
+            runner_group_names_json='["fed-testing"]'
+            environments_json='[
+              {
+                "name": "nonprod",
+                "wait_timer": 0,
+                "prevent_self_review": false,
+                "reviewer_team_slugs": ["platform-engineering"],
+                "reviewer_user_logins": [],
+                "protected_branches": false,
+                "custom_branch_policies": false
+              },
+              {
+                "name": "prod",
+                "wait_timer": 0,
+                "prevent_self_review": true,
+                "reviewer_team_slugs": ["github-platform-admins","platform-security-reviewers"],
+                "reviewer_user_logins": [],
+                "protected_branches": true,
+                "custom_branch_policies": false
+              }
+            ]'
+            ;;
+          helm)
+            template_repo="SecurityUniversalOrg/template-helm"
+            topics_json='["helm","kubernetes","secure-baseline"]'
+            write_teams_json='["platform-engineering","devsecops-engineering"]'
+            read_teams_json='["github-auditors","platform-security-reviewers"]'
+            ruleset_names_json='["global-repository-baseline","helm-repository-baseline"]'
+            runner_group_names_json='["fed-testing"]'
+            environments_json='[
+              {
+                "name": "nonprod",
+                "wait_timer": 0,
+                "prevent_self_review": false,
+                "reviewer_team_slugs": ["platform-engineering"],
+                "reviewer_user_logins": [],
+                "protected_branches": false,
+                "custom_branch_policies": false
+              },
+              {
+                "name": "prod",
+                "wait_timer": 0,
+                "prevent_self_review": true,
+                "reviewer_team_slugs": ["github-platform-admins","platform-security-reviewers"],
+                "reviewer_user_logins": [],
+                "protected_branches": true,
+                "custom_branch_policies": false
+              }
+            ]'
+            ;;
+          configuration)
+            template_repo="SecurityUniversalOrg/template-configuration"
+            topics_json='["configuration","secure-baseline"]'
+            write_teams_json='["platform-engineering","operations-engineering"]'
+            read_teams_json='["github-auditors","platform-security-reviewers"]'
+            ruleset_names_json='["global-repository-baseline","configuration-repository-baseline"]'
+            runner_group_names_json='["fed-testing"]'
+            environments_json='[
+              {
+                "name": "nonprod",
+                "wait_timer": 0,
+                "prevent_self_review": false,
+                "reviewer_team_slugs": ["platform-engineering"],
+                "reviewer_user_logins": [],
+                "protected_branches": false,
+                "custom_branch_policies": false
+              },
+              {
+                "name": "prod",
+                "wait_timer": 0,
+                "prevent_self_review": true,
+                "reviewer_team_slugs": ["github-platform-admins","platform-security-reviewers"],
+                "reviewer_user_logins": [],
+                "protected_branches": true,
+                "custom_branch_policies": false
+              }
+            ]'
+            ;;
+          cicd)
+            template_repo="SecurityUniversalOrg/template-cicd"
+            topics_json='["github-actions","devsecops","secure-baseline"]'
+            write_teams_json='["devsecops-engineering","platform-engineering"]'
+            read_teams_json='["github-auditors","appsec-reviewers"]'
+            ruleset_names_json='["global-repository-baseline","cicd-repository-baseline"]'
+            runner_group_names_json='["fed-testing"]'
             environments_json='[
               {
                 "name": "nonprod",
