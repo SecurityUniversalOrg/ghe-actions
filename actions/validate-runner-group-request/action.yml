@@ -1,0 +1,95 @@
+name: Validate runner group request
+description: Validate workflow_dispatch inputs for adding runner groups to a repository
+
+inputs:
+  github_host:
+    required: true
+  org:
+    required: true
+  repo_name:
+    required: true
+  runner_group_names_json:
+    required: false
+    default: "[]"
+  runner_group_ids_json:
+    required: false
+    default: "[]"
+
+outputs:
+  github_host:
+    value: ${{ steps.validate.outputs.github_host }}
+  org:
+    value: ${{ steps.validate.outputs.org }}
+  repo_name:
+    value: ${{ steps.validate.outputs.repo_name }}
+  runner_group_names_json:
+    value: ${{ steps.validate.outputs.runner_group_names_json }}
+  runner_group_ids_json:
+    value: ${{ steps.validate.outputs.runner_group_ids_json }}
+
+runs:
+  using: composite
+  steps:
+    - id: validate
+      shell: bash
+      env:
+        GITHUB_HOST_INPUT: ${{ inputs.github_host }}
+        ORG_INPUT: ${{ inputs.org }}
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        RUNNER_GROUP_NAMES_JSON_INPUT: ${{ inputs.runner_group_names_json }}
+        RUNNER_GROUP_IDS_JSON_INPUT: ${{ inputs.runner_group_ids_json }}
+      run: |
+        set -euo pipefail
+
+        command -v jq >/dev/null 2>&1 || { echo "ERROR: jq is required"; exit 1; }
+
+        github_host="$(echo -n "$GITHUB_HOST_INPUT" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        org="$(echo -n "$ORG_INPUT" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        repo_name="$(echo -n "$REPO_NAME_INPUT" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+
+        if [[ -z "$github_host" ]]; then
+          echo "ERROR: github_host is required"
+          exit 1
+        fi
+
+        if [[ -z "$org" ]]; then
+          echo "ERROR: org is required"
+          exit 1
+        fi
+
+        if [[ -z "$repo_name" ]]; then
+          echo "ERROR: repo_name is required"
+          exit 1
+        fi
+
+        if [[ ! "$repo_name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+          echo "ERROR: repo_name contains invalid characters"
+          exit 1
+        fi
+
+        echo "$RUNNER_GROUP_NAMES_JSON_INPUT" | jq -e 'if type=="array" then . else empty end' >/dev/null || {
+          echo "ERROR: runner_group_names_json must be a JSON array"
+          exit 1
+        }
+
+        echo "$RUNNER_GROUP_IDS_JSON_INPUT" | jq -e 'if type=="array" then . else empty end' >/dev/null || {
+          echo "ERROR: runner_group_ids_json must be a JSON array"
+          exit 1
+        }
+
+        names_count="$(echo "$RUNNER_GROUP_NAMES_JSON_INPUT" | jq -r 'length')"
+        ids_count="$(echo "$RUNNER_GROUP_IDS_JSON_INPUT" | jq -r 'length')"
+
+        if [[ "$names_count" -eq 0 && "$ids_count" -eq 0 ]]; then
+          echo "ERROR: provide at least one runner group name or ID"
+          exit 1
+        fi
+
+        runner_group_names_json="$(echo "$RUNNER_GROUP_NAMES_JSON_INPUT" | jq -c '.')"
+        runner_group_ids_json="$(echo "$RUNNER_GROUP_IDS_JSON_INPUT" | jq -c '.')"
+
+        echo "github_host=$github_host" >> "$GITHUB_OUTPUT"
+        echo "org=$org" >> "$GITHUB_OUTPUT"
+        echo "repo_name=$repo_name" >> "$GITHUB_OUTPUT"
+        echo "runner_group_names_json=$runner_group_names_json" >> "$GITHUB_OUTPUT"
+        echo "runner_group_ids_json=$runner_group_ids_json" >> "$GITHUB_OUTPUT"
