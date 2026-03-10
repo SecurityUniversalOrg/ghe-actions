@@ -1,0 +1,28 @@
+name: Print commercial to federal sync summary
+description: Print the sync request summary and status
+
+inputs:
+  request_summary_json:
+    required: true
+  approval_status:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        REQUEST_SUMMARY_JSON_INPUT: ${{ inputs.request_summary_json }}
+        APPROVAL_STATUS_INPUT: ${{ inputs.approval_status }}
+      run: |
+        set -euo pipefail
+
+        command -v jq >/dev/null 2>&1 || { echo "ERROR: jq is required"; exit 1; }
+
+        echo "Commercial to Federal Repository Sync Request"
+        echo "  Status:           $APPROVAL_STATUS_INPUT"
+        echo "  Repository:       $(echo "$REQUEST_SUMMARY_JSON_INPUT" | jq -r '.repo_name')"
+        echo "  Type:             $(echo "$REQUEST_SUMMARY_JSON_INPUT" | jq -r '.repo_type')"
+        echo "  Commercial org:   $(echo "$REQUEST_SUMMARY_JSON_INPUT" | jq -r '.commercial_org')"
+        echo "  Federal org:      $(echo "$REQUEST_SUMMARY_JSON_INPUT" | jq -r '.federal_org')"
+        echo "  Justification:    $(echo "$REQUEST_SUMMARY_JSON_INPUT" | jq -r '.justification')"

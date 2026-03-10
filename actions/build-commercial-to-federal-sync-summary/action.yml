@@ -1,0 +1,49 @@
+name: Build commercial to federal sync summary
+description: Build a normalized JSON summary for a commercial-to-federal sync request
+
+inputs:
+  repo_name:
+    required: true
+  repo_type:
+    required: true
+  commercial_org:
+    required: true
+  federal_org:
+    required: true
+  justification:
+    required: true
+
+outputs:
+  request_summary_json:
+    value: ${{ steps.build.outputs.request_summary_json }}
+
+runs:
+  using: composite
+  steps:
+    - id: build
+      shell: bash
+      env:
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        REPO_TYPE_INPUT: ${{ inputs.repo_type }}
+        COMMERCIAL_ORG_INPUT: ${{ inputs.commercial_org }}
+        FEDERAL_ORG_INPUT: ${{ inputs.federal_org }}
+        JUSTIFICATION_INPUT: ${{ inputs.justification }}
+      run: |
+        set -euo pipefail
+
+        request_summary_json="$(jq -cn \
+          --arg repo_name "$REPO_NAME_INPUT" \
+          --arg repo_type "$REPO_TYPE_INPUT" \
+          --arg commercial_org "$COMMERCIAL_ORG_INPUT" \
+          --arg federal_org "$FEDERAL_ORG_INPUT" \
+          --arg justification "$JUSTIFICATION_INPUT" \
+          '{
+            repo_name: $repo_name,
+            repo_type: $repo_type,
+            commercial_org: $commercial_org,
+            federal_org: $federal_org,
+            justification: $justification
+          }'
+        )"
+
+        echo "request_summary_json=$request_summary_json" >> "$GITHUB_OUTPUT"

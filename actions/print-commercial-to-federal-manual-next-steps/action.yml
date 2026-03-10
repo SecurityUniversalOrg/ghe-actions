@@ -1,0 +1,38 @@
+name: Print commercial to federal manual next steps
+description: Print the manual implementation steps after approval
+
+inputs:
+  repo_name:
+    required: true
+  repo_type:
+    required: true
+  commercial_org:
+    required: true
+  federal_org:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        REPO_TYPE_INPUT: ${{ inputs.repo_type }}
+        COMMERCIAL_ORG_INPUT: ${{ inputs.commercial_org }}
+        FEDERAL_ORG_INPUT: ${{ inputs.federal_org }}
+      run: |
+        set -euo pipefail
+
+        echo "Manual Implementation Required"
+        echo "Approved request details:"
+        echo "  Repository:     $REPO_NAME_INPUT"
+        echo "  Type:           $REPO_TYPE_INPUT"
+        echo "  Commercial org: $COMMERCIAL_ORG_INPUT"
+        echo "  Federal org:    $FEDERAL_ORG_INPUT"
+        echo ""
+        echo "Next steps to be completed manually after this workflow:"
+        echo "  1. Review the commercial repository contents and compliance requirements."
+        echo "  2. Create or validate the corresponding federal repository."
+        echo "  3. Perform the approved sync from commercial to federal using the approved manual process."
+        echo "  4. Validate branches, tags, workflows, secrets, and controls in the federal repository."
+        echo "  5. Document completion in the appropriate ticketing or change-management system."

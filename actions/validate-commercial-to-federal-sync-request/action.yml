@@ -1,0 +1,90 @@
+name: Validate commercial to federal sync request
+description: Validate and normalize a commercial-to-federal repo sync request
+
+inputs:
+  repo_name:
+    required: true
+  repo_type:
+    required: true
+  commercial_org:
+    required: true
+  federal_org:
+    required: true
+  justification:
+    required: true
+
+outputs:
+  repo_name:
+    value: ${{ steps.validate.outputs.repo_name }}
+  repo_type:
+    value: ${{ steps.validate.outputs.repo_type }}
+  commercial_org:
+    value: ${{ steps.validate.outputs.commercial_org }}
+  federal_org:
+    value: ${{ steps.validate.outputs.federal_org }}
+  justification:
+    value: ${{ steps.validate.outputs.justification }}
+
+runs:
+  using: composite
+  steps:
+    - id: validate
+      shell: bash
+      env:
+        REPO_NAME_INPUT: ${{ inputs.repo_name }}
+        REPO_TYPE_INPUT: ${{ inputs.repo_type }}
+        COMMERCIAL_ORG_INPUT: ${{ inputs.commercial_org }}
+        FEDERAL_ORG_INPUT: ${{ inputs.federal_org }}
+        JUSTIFICATION_INPUT: ${{ inputs.justification }}
+      run: |
+        set -euo pipefail
+
+        repo_name="$(echo -n "$REPO_NAME_INPUT" | tr '[:upper:]' '[:lower:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        repo_type="$(echo -n "$REPO_TYPE_INPUT" | tr '[:upper:]' '[:lower:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        commercial_org="$(echo -n "$COMMERCIAL_ORG_INPUT" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        federal_org="$(echo -n "$FEDERAL_ORG_INPUT" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        justification="$(echo -n "$JUSTIFICATION_INPUT" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+
+        if [[ -z "$repo_name" ]]; then
+          echo "ERROR: repo_name is required"
+          exit 1
+        fi
+
+        if [[ ! "$repo_name" =~ ^[a-z0-9._-]+$ ]]; then
+          echo "ERROR: repo_name contains invalid characters. Allowed: a-z 0-9 . _ -"
+          exit 1
+        fi
+
+        case "$repo_type" in
+          app|library|terraform|image|docker|helm|configuration|cicd) ;;
+          *)
+            echo "ERROR: invalid repo_type '$repo_type'"
+            exit 1
+            ;;
+        esac
+
+        if [[ -z "$commercial_org" ]]; then
+          echo "ERROR: commercial_org is required"
+          exit 1
+        fi
+
+        if [[ -z "$federal_org" ]]; then
+          echo "ERROR: federal_org is required"
+          exit 1
+        fi
+
+        if [[ "$commercial_org" == "$federal_org" ]]; then
+          echo "ERROR: commercial_org and federal_org must be different"
+          exit 1
+        fi
+
+        if [[ -z "$justification" ]]; then
+          echo "ERROR: justification is required"
+          exit 1
+        fi
+
+        echo "repo_name=$repo_name" >> "$GITHUB_OUTPUT"
+        echo "repo_type=$repo_type" >> "$GITHUB_OUTPUT"
+        echo "commercial_org=$commercial_org" >> "$GITHUB_OUTPUT"
+        echo "federal_org=$federal_org" >> "$GITHUB_OUTPUT"
+        echo "justification=$justification" >> "$GITHUB_OUTPUT"
