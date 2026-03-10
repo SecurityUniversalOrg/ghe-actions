@@ -1,0 +1,26 @@
+name: Build runner group json
+description: Convert selected runner group into JSON array
+
+inputs:
+  runner_group:
+    required: true
+
+outputs:
+  runner_group_names_json:
+    value: ${{ steps.build.outputs.runner_group_names_json }}
+
+runs:
+  using: composite
+  steps:
+    - id: build
+      shell: bash
+      env:
+        RUNNER_GROUP_INPUT: ${{ inputs.runner_group }}
+      run: |
+        set -euo pipefail
+
+        runner_group="$RUNNER_GROUP_INPUT"
+
+        runner_group_names_json="$(jq -cn --arg g "$runner_group" '[$g]')"
+
+        echo "runner_group_names_json=$runner_group_names_json" >> "$GITHUB_OUTPUT"
