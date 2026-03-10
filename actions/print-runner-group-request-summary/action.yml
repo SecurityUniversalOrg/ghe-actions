@@ -10,8 +10,6 @@ inputs:
     required: true
   runner_group_names_json:
     required: true
-  runner_group_ids_json:
-    required: true
 
 runs:
   using: composite
@@ -22,7 +20,6 @@ runs:
         ORG_INPUT: ${{ inputs.org }}
         REPO_NAME_INPUT: ${{ inputs.repo_name }}
         RUNNER_GROUP_NAMES_JSON_INPUT: ${{ inputs.runner_group_names_json }}
-        RUNNER_GROUP_IDS_JSON_INPUT: ${{ inputs.runner_group_ids_json }}
       run: |
         set -euo pipefail
 
@@ -33,4 +30,3 @@ runs:
         echo "  Organization:       $ORG_INPUT"
         echo "  Repository:         $REPO_NAME_INPUT"
         echo "  Runner group names: $(echo "$RUNNER_GROUP_NAMES_JSON_INPUT" | jq -cr '.')"
-        echo "  Runner group ids:   $(echo "$RUNNER_GROUP_IDS_JSON_INPUT" | jq -cr '.')"
