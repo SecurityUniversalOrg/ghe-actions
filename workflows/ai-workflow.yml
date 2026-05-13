@@ -34,31 +34,19 @@ jobs:
           name: repository-security-alerts
           path: security-results/*.json
 
-  co-pilot-triage:
-    runs-on: ubuntu-latest
-    needs: export-security-alerts
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
       - name: Set up Node.js environment
         uses: actions/setup-node@v4
 
       - name: Install Copilot CLI
-        run: npm install -g @github/copilot
-
-      - name: Create AI directory
-        shell: bash
-        run: |
-          mkdir -p ai/
+        run: npm install -g @github/copilot          
 
       - name: Run Copilot Security Triage
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
+
+          mkdir -p ai/
       
           copilot \
             --model claude-opus-4.7 \
