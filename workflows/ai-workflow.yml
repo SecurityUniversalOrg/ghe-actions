@@ -39,7 +39,45 @@ jobs:
         uses: actions/setup-node@v4
 
       - name: Install Copilot CLI
-        run: npm install -g @github/copilot          
+        run: npm install -g @github/copilot
+
+      - name: Create static application environment context
+        run: |
+          set -euo pipefail
+
+          mkdir -p ai/
+
+          cat > ai/env-context.json <<'EOF'
+          {
+            "source": "static-workflow-values",
+            "future_source": "ServiceNow CMDB / SNOW API",
+            "application": {
+              "name": "REPLACE_WITH_APPLICATION_NAME",
+              "business_owner": "REPLACE_WITH_BUSINESS_OWNER",
+              "technical_owner": "REPLACE_WITH_TECHNICAL_OWNER",
+              "development_executive": "REPLACE_WITH_DEVELOPMENT_EXECUTIVE"
+            },
+            "environment": {
+              "name": "production",
+              "classification": "prod",
+              "internet_facing": false,
+              "cloud_platform": "azure",
+              "cloud_platform_allowed_values": [
+                "aws",
+                "azure",
+                "gcp",
+                "on_prem",
+                "hybrid",
+                "unknown"
+              ],
+              "hosting_region": "REPLACE_WITH_REGION",
+              "fedramp_in_scope": true,
+              "cmmc_in_scope": true
+            }
+          }
+          EOF
+
+          jq . ai/env-context.json
 
       - name: Run Copilot Security Triage
         env:
@@ -54,7 +92,12 @@ jobs:
             -p "
           You are a senior application security architect operating in a FedRAMP/CMMC CI/CD pipeline.
           
-          You are analyzing pre-collected scan result files located within security-results/*.json
+          You are analyzing:
+          - pre-collected scan result files located within security-results/*.json
+          - static application/environment context located at ai/env-context.json
+
+          The env-context.json file is temporary static context and will later be replaced by dynamic ServiceNow CMDB/SNOW API calls.
+          Use internet_facing and cloud_platform from env-context.json when determining opa_decision_inputs.internet_exposed_risk and prioritization.
           
           TASK:
           1. Read the files using available shell tools.
@@ -113,6 +156,7 @@ jobs:
           " \
                 --allow-tool='shell(cat:*)' \
                 --allow-tool='write' \
+                --allow-tool='shell(cat:security-results/*,ai/env-context.json)' \
                 --no-ask-user
           
               cat ai/ai-triage.json
