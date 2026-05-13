@@ -28,6 +28,7 @@ jobs:
       - name: Print combined summary
         run: |
           echo "${{ steps.security_alerts.outputs.summary }}"
+          
       - name: Upload security alert JSON files
         uses: actions/upload-artifact@v4
         with:
@@ -123,4 +124,10 @@ jobs:
             has("blocking_findings") and
             has("prioritized_actions") and
             has("opa_decision_inputs")
-          ' ai/ai-triage.json        
+          ' ai/ai-triage.json
+
+      - name: Upload AI Triage JSON file
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-triage
+          path: ai/ai-triage.json
