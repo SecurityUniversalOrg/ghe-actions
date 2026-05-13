@@ -49,6 +49,11 @@ jobs:
       - name: Install Copilot CLI
         run: npm install -g @github/copilot
 
+      - name: Create AI directory
+        shell: bash
+        run: |
+          mkdir -p ai/
+
       - name: Run Copilot Security Triage
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
@@ -114,8 +119,8 @@ jobs:
           - If uncertain, escalate severity (do not under-rank risk)
           - Always assume production exposure unless proven otherwise
           
-          INPUT FILE:
-          security-results/scanner-bundle.json
+          INPUT DIRECTORY:
+          security-results/
           " \
                 --allow-tool='shell(cat:*)' \
                 --allow-tool='write' \
