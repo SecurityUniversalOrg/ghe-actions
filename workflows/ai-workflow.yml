@@ -1,4 +1,4 @@
-name: Daily summary
+name: AI Assist
 
 on:
   workflow_dispatch:
@@ -36,6 +36,7 @@ jobs:
 
   co-pilot-triage:
     runs-on: ubuntu-latest
+    needs: export-security-alerts
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -55,7 +56,7 @@ jobs:
           set -euo pipefail
       
           copilot \
-            --model gpt-5-mini \
+            --model claude-opus-4.7 \
             -p "
           You are a senior application security architect operating in a FedRAMP/CMMC CI/CD pipeline.
           
