@@ -1,0 +1,132 @@
+name: Daily summary
+
+on:
+  workflow_dispatch:
+  # Run this workflow daily at 5:30pm UTC
+  schedule:
+    - cron: '30 17 * * *'
+
+permissions:
+  contents: read
+  security-events: read
+
+jobs:
+  export-security-alerts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get repository security alerts
+        id: security_alerts
+        uses: SecurityUniversalOrg/ghe-actions/actions/gh-get-security-alerts@v1
+        with:
+          github-token: ${{ secrets.SECURITY_SCANNING_READ_TOKEN }}
+          output-dir: security-results
+
+      - name: Print combined summary
+        run: |
+          echo "${{ steps.security_alerts.outputs.summary }}"
+      - name: Upload security alert JSON files
+        uses: actions/upload-artifact@v4
+        with:
+          name: repository-security-alerts
+          path: security-results/*.json
+
+  co-pilot-triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js environment
+        uses: actions/setup-node@v4
+
+      - name: Install Copilot CLI
+        run: npm install -g @github/copilot
+
+      - name: Run Copilot Security Triage
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+      
+          copilot \
+            --model gpt-5-mini \
+            -p "
+          You are a senior application security architect operating in a FedRAMP/CMMC CI/CD pipeline.
+          
+          You are analyzing pre-collected scan result files located within security-results/*.json
+          
+          TASK:
+          1. Read the files using available shell tools.
+          2. Analyze all findings across:
+             - Secret Findings
+             - Dependabot
+             - CodeQL
+          3. Produce STRICT JSON ONLY (no markdown, no commentary).
+          4. Write output to: ai/ai-triage.json using the write tool.
+          
+          REQUIRED JSON SCHEMA:
+          
+          {
+            \"executive_summary\": \"string\",
+            \"blocking_findings\": [
+              {
+                \"id\": \"string\",
+                \"source\": \"trivy|checkov|semgrep|codeql|other\",
+                \"severity\": \"critical|high|medium|low\",
+                \"title\": \"string\",
+                \"file\": \"string|null\",
+                \"evidence\": \"string\",
+                \"why_blocking\": \"string\",
+                \"recommended_fix\": \"string\",
+                \"fedramp_mappings\": [\"RA-5\", \"SI-2\", \"CM-6\"]
+              }
+            ],
+            \"prioritized_actions\": [
+              {
+                \"priority\": 1,
+                \"owner\": \"AppSec|Platform|Developer|Cloud|IAM\",
+                \"action\": \"string\",
+                \"rationale\": \"string\",
+                \"release_blocking\": true
+              }
+            ],
+            \"likely_false_positives\": [],
+            \"opa_decision_inputs\": {
+              \"block_release\": true,
+              \"critical_count\": 0,
+              \"high_count\": 0,
+              \"secret_or_credential_risk\": false,
+              \"internet_exposed_risk\": false
+            }
+          }
+          
+          RULES:
+          - Output MUST be valid JSON
+          - No markdown fences
+          - No explanation text
+          - If uncertain, escalate severity (do not under-rank risk)
+          - Always assume production exposure unless proven otherwise
+          
+          INPUT FILE:
+          security-results/scanner-bundle.json
+          " \
+                --allow-tool='shell(cat:*)' \
+                --allow-tool='write' \
+                --no-ask-user
+          
+              cat ai/ai-triage.json
+
+      - name: Validate AI output
+        run: |
+          jq -e '
+            has("executive_summary") and
+            has("blocking_findings") and
+            has("prioritized_actions") and
+            has("opa_decision_inputs")
+          ' ai/ai-triage.json        
