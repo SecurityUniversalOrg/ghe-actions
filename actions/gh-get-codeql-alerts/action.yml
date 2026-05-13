@@ -1,0 +1,55 @@
+name: Get Open CodeQL Alerts
+description: Gets open CodeQL/code scanning alerts for the current repository.
+
+inputs:
+  github-token:
+    required: true
+  output-dir:
+    required: false
+    default: security-results
+
+outputs:
+  alert_count:
+    value: ${{ steps.fetch.outputs.alert_count }}
+  output_file:
+    value: ${{ steps.fetch.outputs.output_file }}
+  summary:
+    value: ${{ steps.fetch.outputs.summary }}
+
+runs:
+  using: composite
+  steps:
+    - name: Fetch open CodeQL/code scanning alerts
+      id: fetch
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        set -euo pipefail
+
+        mkdir -p "$OUTPUT_DIR"
+
+        OWNER="${GITHUB_REPOSITORY_OWNER}"
+        REPO="${GITHUB_REPOSITORY#*/}"
+        OUTPUT_FILE="$OUTPUT_DIR/open-codeql-alerts.json"
+
+        gh api --paginate \
+          "/repos/${OWNER}/${REPO}/code-scanning/alerts?state=open&per_page=100" \
+          --jq '.[]' | jq -s '.' > "$OUTPUT_FILE"
+
+        ALERT_COUNT="$(jq 'length' "$OUTPUT_FILE")"
+
+        ERROR_COUNT="$(jq '[.[] | select(.rule.security_severity_level == "critical" or .rule.security_severity_level == "high" or .rule.severity == "error")] | length' "$OUTPUT_FILE")"
+        WARNING_COUNT="$(jq '[.[] | select(.rule.severity == "warning")] | length' "$OUTPUT_FILE")"
+        NOTE_COUNT="$(jq '[.[] | select(.rule.severity == "note")] | length' "$OUTPUT_FILE")"
+
+        SUMMARY="Open CodeQL/code scanning alerts: ${ALERT_COUNT} | high_or_error=${ERROR_COUNT}, warning=${WARNING_COUNT}, note=${NOTE_COUNT}"
+
+        echo "$SUMMARY"
+
+        {
+          echo "alert_count=$ALERT_COUNT"
+          echo "output_file=$OUTPUT_FILE"
+          echo "summary=$SUMMARY"
+        } >> "$GITHUB_OUTPUT"
