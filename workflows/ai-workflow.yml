@@ -126,7 +126,361 @@ jobs:
             has("opa_decision_inputs")
           ' ai/ai-triage.json
 
+      - name: Extract OPA decision input
+        run: |
+          set -euo pipefail
+
+          mkdir -p ai/opa
+
+          jq -e '.opa_decision_inputs' ai/ai-triage.json > ai/opa/opa-input.json
+
+          echo "OPA decision input:"
+          cat ai/opa/opa-input.json
+
+      - name: Install OPA
+        run: |
+          set -euo pipefail
+
+          curl -L -o opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
+          chmod +x opa
+          sudo mv opa /usr/local/bin/opa
+
+          opa version
+
+      - name: Evaluate AI triage OPA release gate
+        id: opa_gate
+        run: |
+          set -euo pipefail
+
+          mkdir -p ai/opa
+
+          opa eval \
+            --format=json \
+            --data .github/opa/ai_triage_release_gate.rego \
+            --input ai/opa/opa-input.json \
+            'data.ai.triage.release' \
+            > ai/opa/opa-decision.json
+
+          ALLOW="$(jq -r '.result[0].expressions[0].value.allow' ai/opa/opa-decision.json)"
+          DENY_REASONS="$(jq -r '.result[0].expressions[0].value.deny // [] | join("; ")' ai/opa/opa-decision.json)"
+
+          echo "allow=$ALLOW" >> "$GITHUB_OUTPUT"
+          echo "deny_reasons=$DENY_REASONS" >> "$GITHUB_OUTPUT"
+
+          echo "OPA allow decision: $ALLOW"
+          echo "OPA deny reasons: $DENY_REASONS"
+
+          if [ "$ALLOW" != "true" ]; then
+            echo "Release blocked by OPA policy"
+            exit 1
+          fi
+
+      - name: Generate executive HTML report
+        if: always()
+        run: |
+          set -euo pipefail
+
+          mkdir -p ai/report
+
+          python3 <<'PY'
+          import json
+          import html
+          from pathlib import Path
+          from datetime import datetime, timezone
+
+          triage_path = Path("ai/ai-triage.json")
+          opa_input_path = Path("ai/opa/opa-input.json")
+          opa_decision_path = Path("ai/opa/opa-decision.json")
+          report_path = Path("ai/report/ai-security-triage-report.html")
+
+          triage = json.loads(triage_path.read_text())
+          opa_input = json.loads(opa_input_path.read_text()) if opa_input_path.exists() else {}
+          opa_decision = json.loads(opa_decision_path.read_text()) if opa_decision_path.exists() else {}
+
+          def esc(value):
+              return html.escape("" if value is None else str(value))
+
+          def severity_class(sev):
+              sev = str(sev or "").lower()
+              return {
+                  "critical": "critical",
+                  "high": "high",
+                  "medium": "medium",
+                  "low": "low"
+              }.get(sev, "info")
+
+          blocking = triage.get("blocking_findings", [])
+          actions = triage.get("prioritized_actions", [])
+          false_positives = triage.get("likely_false_positives", [])
+          odi = triage.get("opa_decision_inputs", {})
+
+          allow = "Unknown"
+          deny_reasons = []
+          try:
+              value = opa_decision["result"][0]["expressions"][0]["value"]
+              allow = value.get("allow", "Unknown")
+              deny_reasons = value.get("deny", [])
+          except Exception:
+              pass
+
+          block_release = odi.get("block_release", False)
+          critical_count = odi.get("critical_count", 0)
+          high_count = odi.get("high_count", 0)
+          secret_risk = odi.get("secret_or_credential_risk", False)
+          internet_risk = odi.get("internet_exposed_risk", False)
+
+          generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+          blocking_rows = "\n".join(
+              f"""
+              <tr>
+                <td><span class="badge {severity_class(f.get('severity'))}">{esc(f.get('severity'))}</span></td>
+                <td><strong>{esc(f.get('title'))}</strong><br><span class="muted">{esc(f.get('id'))}</span></td>
+                <td>{esc(f.get('source'))}</td>
+                <td>{esc(f.get('file'))}</td>
+                <td>{esc(f.get('why_blocking'))}</td>
+                <td>{esc(f.get('recommended_fix'))}</td>
+              </tr>
+              """
+              for f in blocking
+          ) or '<tr><td colspan="6" class="muted">No blocking findings reported.</td></tr>'
+
+          action_rows = "\n".join(
+              f"""
+              <tr>
+                <td>{esc(a.get('priority'))}</td>
+                <td>{esc(a.get('owner'))}</td>
+                <td>{esc(a.get('action'))}</td>
+                <td>{esc(a.get('rationale'))}</td>
+                <td>{'Yes' if a.get('release_blocking') else 'No'}</td>
+              </tr>
+              """
+              for a in actions
+          ) or '<tr><td colspan="5" class="muted">No prioritized actions reported.</td></tr>'
+
+          deny_list = "".join(f"<li>{esc(r)}</li>" for r in deny_reasons) or "<li>No deny reasons reported.</li>"
+
+          html_report = f"""<!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <title>AI Security Triage Executive Report</title>
+            <style>
+              body {{
+                margin: 0;
+                font-family: Arial, Helvetica, sans-serif;
+                background: #f4f6f8;
+                color: #1f2937;
+              }}
+              .container {{
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 32px;
+              }}
+              .header {{
+                background: linear-gradient(135deg, #111827, #374151);
+                color: white;
+                padding: 32px;
+                border-radius: 18px;
+                box-shadow: 0 10px 25px rgba(0,0,0,.12);
+              }}
+              .header h1 {{
+                margin: 0 0 8px 0;
+                font-size: 30px;
+              }}
+              .header p {{
+                margin: 0;
+                color: #d1d5db;
+              }}
+              .grid {{
+                display: grid;
+                grid-template-columns: repeat(5, 1fr);
+                gap: 16px;
+                margin: 24px 0;
+              }}
+              .card {{
+                background: white;
+                border-radius: 16px;
+                padding: 20px;
+                box-shadow: 0 6px 18px rgba(0,0,0,.08);
+                border: 1px solid #e5e7eb;
+              }}
+              .metric {{
+                font-size: 28px;
+                font-weight: 700;
+                margin-top: 8px;
+              }}
+              .label {{
+                color: #6b7280;
+                font-size: 13px;
+                text-transform: uppercase;
+                letter-spacing: .05em;
+              }}
+              .section {{
+                background: white;
+                border-radius: 16px;
+                padding: 24px;
+                margin: 20px 0;
+                box-shadow: 0 6px 18px rgba(0,0,0,.08);
+                border: 1px solid #e5e7eb;
+              }}
+              .section h2 {{
+                margin-top: 0;
+                font-size: 22px;
+                border-bottom: 1px solid #e5e7eb;
+                padding-bottom: 12px;
+              }}
+              table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 12px;
+              }}
+              th {{
+                background: #f9fafb;
+                text-align: left;
+                font-size: 13px;
+                color: #374151;
+                border-bottom: 1px solid #e5e7eb;
+                padding: 12px;
+              }}
+              td {{
+                border-bottom: 1px solid #e5e7eb;
+                padding: 12px;
+                vertical-align: top;
+                font-size: 14px;
+              }}
+              .badge {{
+                display: inline-block;
+                padding: 5px 10px;
+                border-radius: 999px;
+                font-size: 12px;
+                font-weight: 700;
+                text-transform: uppercase;
+              }}
+              .critical {{ background: #fee2e2; color: #991b1b; }}
+              .high {{ background: #ffedd5; color: #9a3412; }}
+              .medium {{ background: #fef3c7; color: #92400e; }}
+              .low {{ background: #dcfce7; color: #166534; }}
+              .info {{ background: #e0f2fe; color: #075985; }}
+              .status-pass {{ color: #166534; font-weight: 700; }}
+              .status-fail {{ color: #991b1b; font-weight: 700; }}
+              .muted {{ color: #6b7280; }}
+              pre {{
+                white-space: pre-wrap;
+                background: #111827;
+                color: #e5e7eb;
+                padding: 16px;
+                border-radius: 12px;
+                overflow-x: auto;
+              }}
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>AI Security Triage Executive Report</h1>
+                <p>Repository: {esc(Path.cwd().name)} | Generated: {esc(generated)}</p>
+              </div>
+
+              <div class="grid">
+                <div class="card">
+                  <div class="label">Release Gate</div>
+                  <div class="metric {'status-fail' if block_release else 'status-pass'}">{'Blocked' if block_release else 'Not Blocked'}</div>
+                </div>
+                <div class="card">
+                  <div class="label">Critical</div>
+                  <div class="metric">{esc(critical_count)}</div>
+                </div>
+                <div class="card">
+                  <div class="label">High</div>
+                  <div class="metric">{esc(high_count)}</div>
+                </div>
+                <div class="card">
+                  <div class="label">Credential Risk</div>
+                  <div class="metric {'status-fail' if secret_risk else 'status-pass'}">{'Yes' if secret_risk else 'No'}</div>
+                </div>
+                <div class="card">
+                  <div class="label">Internet Exposure</div>
+                  <div class="metric {'status-fail' if internet_risk else 'status-pass'}">{'Yes' if internet_risk else 'No'}</div>
+                </div>
+              </div>
+
+              <div class="section">
+                <h2>Executive Summary</h2>
+                <p>{esc(triage.get("executive_summary"))}</p>
+              </div>
+
+              <div class="section">
+                <h2>OPA Release Gate Decision</h2>
+                <p><strong>OPA Allow:</strong> <span class="{'status-pass' if allow is True else 'status-fail'}">{esc(allow)}</span></p>
+                <p><strong>Deny Reasons:</strong></p>
+                <ul>{deny_list}</ul>
+              </div>
+
+              <div class="section">
+                <h2>Blocking Findings</h2>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Severity</th>
+                      <th>Finding</th>
+                      <th>Source</th>
+                      <th>File</th>
+                      <th>Why Blocking</th>
+                      <th>Recommended Fix</th>
+                    </tr>
+                  </thead>
+                  <tbody>{blocking_rows}</tbody>
+                </table>
+              </div>
+
+              <div class="section">
+                <h2>Prioritized Remediation Actions</h2>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Priority</th>
+                      <th>Owner</th>
+                      <th>Action</th>
+                      <th>Rationale</th>
+                      <th>Release Blocking</th>
+                    </tr>
+                  </thead>
+                  <tbody>{action_rows}</tbody>
+                </table>
+              </div>
+
+              <div class="section">
+                <h2>OPA Decision Inputs</h2>
+                <pre>{esc(json.dumps(opa_input, indent=2))}</pre>
+              </div>
+
+              <div class="section">
+                <h2>Full AI Triage JSON</h2>
+                <pre>{esc(json.dumps(triage, indent=2))}</pre>
+              </div>
+            </div>
+          </body>
+          </html>
+          """
+
+          report_path.write_text(html_report)
+          print(f"Wrote {report_path}")
+          PY
+
+      - name: Upload AI executive HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-security-executive-report
+          path: |
+            ai/report/ai-security-triage-report.html
+            ai/opa/opa-input.json
+            ai/opa/opa-decision.json
+            .github/opa/ai_triage_release_gate.rego
+
       - name: Upload AI Triage JSON file
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ai-triage
