@@ -1,0 +1,57 @@
+name: Get Repository Security Alerts
+description: Gets open secret scanning, Dependabot, and CodeQL/code scanning alerts for the current repository.
+
+inputs:
+  github-token:
+    description: GitHub token with security events read access.
+    required: true
+  output-dir:
+    description: Directory where JSON output files will be saved.
+    required: false
+    default: security-results
+
+outputs:
+  secret_alert_count:
+    description: Number of open secret scanning alerts.
+    value: ${{ steps.secrets.outputs.alert_count }}
+  dependabot_alert_count:
+    description: Number of open Dependabot alerts.
+    value: ${{ steps.dependabot.outputs.alert_count }}
+  codeql_alert_count:
+    description: Number of open CodeQL/code scanning alerts.
+    value: ${{ steps.codeql.outputs.alert_count }}
+  summary:
+    description: Combined security alert summary.
+    value: ${{ steps.summary.outputs.summary }}
+
+runs:
+  using: composite
+  steps:
+    - name: Get open secret scanning alerts
+      id: secrets
+      uses: SecurityUniversalOrg/ghe-actions/actions/gh-get-secret-alerts@v1
+      with:
+        github-token: ${{ inputs.github-token }}
+        output-dir: ${{ inputs.output-dir }}
+
+    - name: Get open Dependabot alerts
+      id: dependabot
+      uses: SecurityUniversalOrg/ghe-actions/actions/gh-get-dependabot-alerts@v1
+      with:
+        github-token: ${{ inputs.github-token }}
+        output-dir: ${{ inputs.output-dir }}
+
+    - name: Get open CodeQL/code scanning alerts
+      id: codeql
+      uses: SecurityUniversalOrg/ghe-actions/actions/gh-get-codeql-alerts@v1
+      with:
+        github-token: ${{ inputs.github-token }}
+        output-dir: ${{ inputs.output-dir }}
+
+    - name: Build combined summary
+      id: summary
+      shell: bash
+      run: |
+        SUMMARY="Secrets=${{ steps.secrets.outputs.alert_count }}, Dependabot=${{ steps.dependabot.outputs.alert_count }}, CodeQL=${{ steps.codeql.outputs.alert_count }}"
+        echo "$SUMMARY"
+        echo "summary=$SUMMARY" >> "$GITHUB_OUTPUT"
