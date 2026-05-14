@@ -1,0 +1,83 @@
+name: Build with specific MSBuild
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    env:
+      VS_VERSION_RANGE: "[17.0,18.0)"   # VS 2022 / MSBuild 17.x
+      VS_BUILDTOOLS_URL: "https://aka.ms/vs/17/release/vs_buildtools.exe"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MSBuild Build Tools if missing
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+
+          if (-not (Test-Path $vswhere)) {
+            Write-Host "vswhere.exe not found. Installing Build Tools."
+            $needsInstall = $true
+          }
+          else {
+            $installPath = & $vswhere `
+              -version $env:VS_VERSION_RANGE `
+              -products Microsoft.VisualStudio.Product.BuildTools Microsoft.VisualStudio.Product.Enterprise Microsoft.VisualStudio.Product.Professional Microsoft.VisualStudio.Product.Community `
+              -requires Microsoft.Component.MSBuild `
+              -property installationPath `
+              -latest
+
+            if ([string]::IsNullOrWhiteSpace($installPath)) {
+              Write-Host "Requested MSBuild version was not found."
+              $needsInstall = $true
+            }
+            else {
+              $msbuild = Join-Path $installPath "MSBuild\Current\Bin\MSBuild.exe"
+              if (Test-Path $msbuild) {
+                Write-Host "MSBuild already installed at: $msbuild"
+                $needsInstall = $false
+              }
+              else {
+                Write-Host "Visual Studio found, but MSBuild.exe was not found."
+                $needsInstall = $true
+              }
+            }
+          }
+
+          if ($needsInstall) {
+            $installer = "$env:TEMP\vs_buildtools.exe"
+
+            Invoke-WebRequest `
+              -Uri $env:VS_BUILDTOOLS_URL `
+              -OutFile $installer
+
+            Start-Process `
+              -FilePath $installer `
+              -ArgumentList @(
+                "--quiet",
+                "--wait",
+                "--norestart",
+                "--nocache",
+                "--add", "Microsoft.VisualStudio.Workload.MSBuildTools"
+              ) `
+              -Wait `
+              -NoNewWindow
+
+            Write-Host "MSBuild Build Tools installation completed."
+          }
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+        with:
+          vs-version: '[17.0,18.0)'
+
+      - name: Build solution
+        shell: pwsh
+        run: |
+          msbuild .\YourSolution.sln /p:Configuration=Release /m
