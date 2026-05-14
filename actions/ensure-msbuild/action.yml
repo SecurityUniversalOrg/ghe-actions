@@ -1,26 +1,31 @@
-name: Ensure MSBuild
-description: Installs a specific Visual Studio/MSBuild version only if missing
+name: Ensure MSBuild 16.11
+description: Ensures Visual Studio 2019 Build Tools / MSBuild 16.11 is available
 
 inputs:
   vs-version-range:
-    description: Visual Studio version range, e.g. [17.0,18.0)
+    description: Visual Studio 2019 version range
     required: false
-    default: "[17.0,18.0)"
+    default: "[16.11,17.0)"
 
   buildtools-url:
-    description: Visual Studio Build Tools bootstrapper URL
+    description: Visual Studio 2019 Build Tools bootstrapper URL
     required: false
-    default: "https://aka.ms/vs/17/release/vs_buildtools.exe"
+    default: "https://aka.ms/vs/16/release/vs_buildtools.exe"
 
   workloads:
     description: Space-separated Visual Studio workloads/components to install
     required: false
     default: "Microsoft.VisualStudio.Workload.MSBuildTools"
 
+outputs:
+  msbuild-path:
+    description: Full path to MSBuild.exe
+    value: ${{ steps.find-msbuild.outputs.msbuild-path }}
+
 runs:
   using: composite
   steps:
-    - name: Install MSBuild Build Tools if missing
+    - name: Install VS 2019 Build Tools if MSBuild 16.11 is missing
       shell: pwsh
       run: |
         $ErrorActionPreference = "Stop"
@@ -33,7 +38,7 @@ runs:
         $needsInstall = $false
 
         if (-not (Test-Path $vswhere)) {
-          Write-Host "vswhere.exe not found. Build Tools installation required."
+          Write-Host "vswhere.exe not found. VS 2019 Build Tools installation required."
           $needsInstall = $true
         }
         else {
@@ -45,26 +50,25 @@ runs:
             -latest
 
           if ([string]::IsNullOrWhiteSpace($installPath)) {
-            Write-Host "Requested MSBuild version was not found."
+            Write-Host "MSBuild 16.11 was not found."
             $needsInstall = $true
           }
           else {
             $msbuild = Join-Path $installPath "MSBuild\Current\Bin\MSBuild.exe"
 
             if (Test-Path $msbuild) {
-              Write-Host "MSBuild already exists at: $msbuild"
-              "MSBUILD_PATH=$msbuild" | Out-File -FilePath $env:GITHUB_ENV -Append
+              Write-Host "MSBuild 16.11 already exists at: $msbuild"
               $needsInstall = $false
             }
             else {
-              Write-Host "Visual Studio installation found, but MSBuild.exe was not found."
+              Write-Host "Visual Studio 2019 found, but MSBuild.exe was not found."
               $needsInstall = $true
             }
           }
         }
 
         if ($needsInstall) {
-          $installer = "$env:TEMP\vs_buildtools.exe"
+          $installer = "$env:TEMP\vs_buildtools_2019.exe"
 
           Invoke-WebRequest `
             -Uri $buildToolsUrl `
@@ -87,10 +91,35 @@ runs:
             -Wait `
             -NoNewWindow
 
-          Write-Host "MSBuild Build Tools installation completed."
+          Write-Host "VS 2019 Build Tools installation completed."
         }
 
-    - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v2
-      with:
-        vs-version: ${{ inputs.vs-version-range }}
+    - name: Find MSBuild 16.11
+      id: find-msbuild
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = "Stop"
+
+        $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+
+        $installPath = & $vswhere `
+          -version '${{ inputs.vs-version-range }}' `
+          -products Microsoft.VisualStudio.Product.BuildTools Microsoft.VisualStudio.Product.Enterprise Microsoft.VisualStudio.Product.Professional Microsoft.VisualStudio.Product.Community `
+          -requires Microsoft.Component.MSBuild `
+          -property installationPath `
+          -latest
+
+        if ([string]::IsNullOrWhiteSpace($installPath)) {
+          throw "Unable to locate Visual Studio 2019 / MSBuild 16.11 after installation."
+        }
+
+        $msbuild = Join-Path $installPath "MSBuild\Current\Bin\MSBuild.exe"
+
+        if (-not (Test-Path $msbuild)) {
+          throw "MSBuild.exe not found at expected path: $msbuild"
+        }
+
+        Write-Host "Using MSBuild at: $msbuild"
+
+        "MSBUILD_PATH=$msbuild" | Out-File -FilePath $env:GITHUB_ENV -Append
+        "msbuild-path=$msbuild" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
