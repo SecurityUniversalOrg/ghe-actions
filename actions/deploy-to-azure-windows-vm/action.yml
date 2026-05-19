@@ -1,0 +1,99 @@
+name: Deploy to Azure Windows VM
+description: Deploys a ZIP package to an Azure Windows VM using Azure VM Run Command
+
+inputs:
+  resource-group:
+    required: true
+    description: Azure resource group containing the VM
+
+  vm-name:
+    required: true
+    description: Azure VM name
+
+  package-url:
+    required: true
+    description: SAS URL to deployment ZIP package
+
+  deploy-root:
+    required: false
+    default: C:\Deployments
+    description: Temporary deployment root on the VM
+
+  app-install-path:
+    required: true
+    description: Final application installation path on the VM
+
+  windows-service-name:
+    required: false
+    description: Optional Windows Service name to restart
+
+runs:
+  using: composite
+  steps:
+    - name: Deploy package on VM
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = "Stop"
+
+        $scriptPath = Join-Path $env:RUNNER_TEMP "deploy-to-vm.ps1"
+
+        @'
+        param(
+          [string]$PackageUrl,
+          [string]$DeployRoot,
+          [string]$AppInstallPath,
+          [string]$WindowsServiceName
+        )
+
+        $ErrorActionPreference = "Stop"
+
+        $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+        $workDir = Join-Path $DeployRoot $timestamp
+        $packagePath = Join-Path $workDir "package.zip"
+        $extractPath = Join-Path $workDir "extract"
+        $backupRoot = Join-Path $DeployRoot "backups"
+        $backupPath = Join-Path $backupRoot "backup-$timestamp"
+
+        New-Item -ItemType Directory -Force -Path $workDir, $extractPath, $backupRoot | Out-Null
+
+        Invoke-WebRequest -Uri $PackageUrl -OutFile $packagePath
+        Expand-Archive -Path $packagePath -DestinationPath $extractPath -Force
+
+        if (-not [string]::IsNullOrWhiteSpace($WindowsServiceName)) {
+          $service = Get-Service -Name $WindowsServiceName -ErrorAction SilentlyContinue
+
+          if ($service -and $service.Status -ne "Stopped") {
+            Stop-Service -Name $WindowsServiceName -Force
+            $service.WaitForStatus("Stopped", "00:02:00")
+          }
+        }
+
+        if (Test-Path $AppInstallPath) {
+          New-Item -ItemType Directory -Force -Path $backupPath | Out-Null
+          Copy-Item -Path "$AppInstallPath\*" -Destination $backupPath -Recurse -Force
+        }
+        else {
+          New-Item -ItemType Directory -Force -Path $AppInstallPath | Out-Null
+        }
+
+        Copy-Item -Path "$extractPath\*" -Destination $AppInstallPath -Recurse -Force
+
+        if (-not [string]::IsNullOrWhiteSpace($WindowsServiceName)) {
+          Start-Service -Name $WindowsServiceName
+          $service = Get-Service -Name $WindowsServiceName
+          $service.WaitForStatus("Running", "00:02:00")
+        }
+
+        Write-Host "Deployment completed successfully."
+        '@ | Out-File -FilePath $scriptPath -Encoding utf8
+
+        az vm run-command invoke `
+          --resource-group "${{ inputs.resource-group }}" `
+          --name "${{ inputs.vm-name }}" `
+          --command-id RunPowerShellScript `
+          --scripts "@$scriptPath" `
+          --parameters `
+            "PackageUrl=${{ inputs.package-url }}" `
+            "DeployRoot=${{ inputs.deploy-root }}" `
+            "AppInstallPath=${{ inputs.app-install-path }}" `
+            "WindowsServiceName=${{ inputs.windows-service-name }}"
