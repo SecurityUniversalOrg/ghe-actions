@@ -1,0 +1,162 @@
+name: Copilot Security Triage
+description: Runs GitHub Copilot CLI security triage against pre-collected security scan results and environment context.
+
+inputs:
+  copilot-github-token:
+    description: GitHub token used by Copilot CLI.
+    required: true
+
+  model:
+    description: Copilot model to use for security triage.
+    required: false
+    default: claude-opus-4.7
+
+  security-results-directory:
+    description: Directory containing pre-collected scanner JSON files.
+    required: false
+    default: security-results
+
+  env-context-file:
+    description: Static application/environment context JSON file.
+    required: false
+    default: ai/env-context.json
+
+  output-directory:
+    description: Directory where ai-triage.json will be written.
+    required: false
+    default: ai
+
+  output-file-name:
+    description: Name of the triage output JSON file.
+    required: false
+    default: ai-triage.json
+
+outputs:
+  ai-triage-file:
+    description: Path to the generated AI triage JSON file.
+    value: ${{ steps.run-copilot-triage.outputs.ai-triage-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run Copilot Security Triage
+      id: run-copilot-triage
+      shell: bash
+      env:
+        COPILOT_GITHUB_TOKEN: ${{ inputs.copilot-github-token }}
+      run: |
+        set -euo pipefail
+
+        SECURITY_RESULTS_DIRECTORY="${{ inputs.security-results-directory }}"
+        ENV_CONTEXT_FILE="${{ inputs.env-context-file }}"
+        OUTPUT_DIRECTORY="${{ inputs.output-directory }}"
+        OUTPUT_FILE="${OUTPUT_DIRECTORY}/${{ inputs.output-file-name }}"
+
+        mkdir -p "${OUTPUT_DIRECTORY}"
+
+        if ! command -v copilot >/dev/null 2>&1; then
+          echo "ERROR: copilot CLI was not found on PATH."
+          echo "Install or configure Copilot CLI before running this composite action."
+          exit 1
+        fi
+
+        if ! command -v jq >/dev/null 2>&1; then
+          echo "ERROR: jq was not found on PATH."
+          exit 1
+        fi
+
+        if [ ! -d "${SECURITY_RESULTS_DIRECTORY}" ]; then
+          echo "ERROR: Security results directory not found: ${SECURITY_RESULTS_DIRECTORY}"
+          exit 1
+        fi
+
+        if [ ! -f "${ENV_CONTEXT_FILE}" ]; then
+          echo "ERROR: Environment context file not found: ${ENV_CONTEXT_FILE}"
+          exit 1
+        fi
+
+        if ! ls "${SECURITY_RESULTS_DIRECTORY}"/*.json >/dev/null 2>&1; then
+          echo "ERROR: No JSON files found in ${SECURITY_RESULTS_DIRECTORY}/"
+          exit 1
+        fi
+
+        copilot \
+          --model "${{ inputs.model }}" \
+          -p "
+        You are a senior application security architect operating in a FedRAMP/CMMC CI/CD pipeline.
+
+        You are analyzing:
+        - pre-collected scan result files located within ${SECURITY_RESULTS_DIRECTORY}/*.json
+        - static application/environment context located at ${ENV_CONTEXT_FILE}
+
+        The env-context.json file is temporary static context and will later be replaced by dynamic ServiceNow CMDB/SNOW API calls.
+        Use internet_facing and cloud_platform from env-context.json when determining opa_decision_inputs.internet_exposed_risk and prioritization.
+
+        TASK:
+        1. Read the files using available shell tools.
+        2. Analyze all findings across:
+           - Secret Findings
+           - Dependabot
+           - CodeQL
+        3. Produce STRICT JSON ONLY, no markdown, no commentary.
+        4. Write output to: ${OUTPUT_FILE} using the write tool.
+
+        REQUIRED JSON SCHEMA:
+
+        {
+          \"executive_summary\": \"string\",
+          \"blocking_findings\": [
+            {
+              \"id\": \"string\",
+              \"source\": \"trivy|checkov|semgrep|codeql|other\",
+              \"severity\": \"critical|high|medium|low\",
+              \"title\": \"string\",
+              \"file\": \"string|null\",
+              \"evidence\": \"string\",
+              \"why_blocking\": \"string\",
+              \"recommended_fix\": \"string\",
+              \"fedramp_mappings\": [\"RA-5\", \"SI-2\", \"CM-6\"]
+            }
+          ],
+          \"prioritized_actions\": [
+            {
+              \"priority\": 1,
+              \"owner\": \"AppSec|Platform|Developer|Cloud|IAM\",
+              \"action\": \"string\",
+              \"rationale\": \"string\",
+              \"release_blocking\": true
+            }
+          ],
+          \"likely_false_positives\": [],
+          \"opa_decision_inputs\": {
+            \"block_release\": true,
+            \"critical_count\": 0,
+            \"high_count\": 0,
+            \"secret_or_credential_risk\": false,
+            \"internet_exposed_risk\": false
+          }
+        }
+
+        RULES:
+        - Output MUST be valid JSON
+        - No markdown fences
+        - No explanation text
+        - If uncertain, escalate severity, do not under-rank risk
+        - Always assume production exposure unless proven otherwise
+
+        INPUT DIRECTORY:
+        ${SECURITY_RESULTS_DIRECTORY}/
+        " \
+          --allow-tool='shell(cat:*)' \
+          --allow-tool='write' \
+          --allow-tool="shell(cat:${SECURITY_RESULTS_DIRECTORY}/*,${ENV_CONTEXT_FILE})" \
+          --no-ask-user
+
+        if [ ! -f "${OUTPUT_FILE}" ]; then
+          echo "ERROR: Copilot did not create expected output file: ${OUTPUT_FILE}"
+          exit 1
+        fi
+
+        jq . "${OUTPUT_FILE}"
+
+        echo "ai-triage-file=${OUTPUT_FILE}" >> "$GITHUB_OUTPUT"

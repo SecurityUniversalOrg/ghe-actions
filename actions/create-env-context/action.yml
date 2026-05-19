@@ -1,0 +1,138 @@
+name: Create Static Application Environment Context
+description: Creates a static ai/env-context.json file for AI-assisted security triage until ServiceNow CMDB integration is available.
+
+inputs:
+  output-directory:
+    description: Directory where env-context.json will be written.
+    required: false
+    default: ai
+
+  application-name:
+    description: Application name.
+    required: false
+    default: REPLACE_WITH_APPLICATION_NAME
+
+  business-owner:
+    description: Business owner for the application.
+    required: false
+    default: REPLACE_WITH_BUSINESS_OWNER
+
+  technical-owner:
+    description: Technical owner for the application.
+    required: false
+    default: REPLACE_WITH_TECHNICAL_OWNER
+
+  development-executive:
+    description: Development executive responsible for the application.
+    required: false
+    default: REPLACE_WITH_DEVELOPMENT_EXECUTIVE
+
+  environment-name:
+    description: Environment name.
+    required: false
+    default: production
+
+  environment-classification:
+    description: Environment classification, such as prod, nonprod, dev, test, stage.
+    required: false
+    default: prod
+
+  internet-facing:
+    description: Whether the application is internet facing.
+    required: false
+    default: "false"
+
+  cloud-platform:
+    description: Hosting cloud platform. Allowed values are aws, azure, gcp, on_prem, hybrid, unknown.
+    required: false
+    default: azure
+
+  hosting-region:
+    description: Hosting region for the application.
+    required: false
+    default: REPLACE_WITH_REGION
+
+  fedramp-in-scope:
+    description: Whether the application is FedRAMP in scope.
+    required: false
+    default: "true"
+
+  cmmc-in-scope:
+    description: Whether the application is CMMC in scope.
+    required: false
+    default: "true"
+
+outputs:
+  env-context-file:
+    description: Path to the generated environment context file.
+    value: ${{ steps.create-env-context.outputs.env-context-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Create static application environment context
+      id: create-env-context
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        OUTPUT_DIRECTORY="${{ inputs.output-directory }}"
+        OUTPUT_FILE="${OUTPUT_DIRECTORY}/env-context.json"
+
+        mkdir -p "${OUTPUT_DIRECTORY}"
+
+        case "${{ inputs.cloud-platform }}" in
+          aws|azure|gcp|on_prem|hybrid|unknown)
+            ;;
+          *)
+            echo "ERROR: Invalid cloud-platform value: ${{ inputs.cloud-platform }}"
+            echo "Allowed values: aws, azure, gcp, on_prem, hybrid, unknown"
+            exit 1
+            ;;
+        esac
+
+        jq -n \
+          --arg source "static-workflow-values" \
+          --arg future_source "ServiceNow CMDB / SNOW API" \
+          --arg application_name "${{ inputs.application-name }}" \
+          --arg business_owner "${{ inputs.business-owner }}" \
+          --arg technical_owner "${{ inputs.technical-owner }}" \
+          --arg development_executive "${{ inputs.development-executive }}" \
+          --arg environment_name "${{ inputs.environment-name }}" \
+          --arg environment_classification "${{ inputs.environment-classification }}" \
+          --arg cloud_platform "${{ inputs.cloud-platform }}" \
+          --arg hosting_region "${{ inputs.hosting-region }}" \
+          --argjson internet_facing "${{ inputs.internet-facing }}" \
+          --argjson fedramp_in_scope "${{ inputs.fedramp-in-scope }}" \
+          --argjson cmmc_in_scope "${{ inputs.cmmc-in-scope }}" \
+          '{
+            source: $source,
+            future_source: $future_source,
+            application: {
+              name: $application_name,
+              business_owner: $business_owner,
+              technical_owner: $technical_owner,
+              development_executive: $development_executive
+            },
+            environment: {
+              name: $environment_name,
+              classification: $environment_classification,
+              internet_facing: $internet_facing,
+              cloud_platform: $cloud_platform,
+              cloud_platform_allowed_values: [
+                "aws",
+                "azure",
+                "gcp",
+                "on_prem",
+                "hybrid",
+                "unknown"
+              ],
+              hosting_region: $hosting_region,
+              fedramp_in_scope: $fedramp_in_scope,
+              cmmc_in_scope: $cmmc_in_scope
+            }
+          }' > "${OUTPUT_FILE}"
+
+        jq . "${OUTPUT_FILE}"
+
+        echo "env-context-file=${OUTPUT_FILE}" >> "$GITHUB_OUTPUT"
