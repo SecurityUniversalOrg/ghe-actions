@@ -42,124 +42,30 @@ jobs:
         run: npm install -g @github/copilot
 
       - name: Create static application environment context
-        run: |
-          set -euo pipefail
-
-          mkdir -p ai/
-
-          cat > ai/env-context.json <<'EOF'
-          {
-            "source": "static-workflow-values",
-            "future_source": "ServiceNow CMDB / SNOW API",
-            "application": {
-              "name": "REPLACE_WITH_APPLICATION_NAME",
-              "business_owner": "REPLACE_WITH_BUSINESS_OWNER",
-              "technical_owner": "REPLACE_WITH_TECHNICAL_OWNER",
-              "development_executive": "REPLACE_WITH_DEVELOPMENT_EXECUTIVE"
-            },
-            "environment": {
-              "name": "production",
-              "classification": "prod",
-              "internet_facing": false,
-              "cloud_platform": "azure",
-              "cloud_platform_allowed_values": [
-                "aws",
-                "azure",
-                "gcp",
-                "on_prem",
-                "hybrid",
-                "unknown"
-              ],
-              "hosting_region": "REPLACE_WITH_REGION",
-              "fedramp_in_scope": true,
-              "cmmc_in_scope": true
-            }
-          }
-          EOF
-
-          jq . ai/env-context.json
+        uses: ./.github/actions/create-env-context
+        with:
+          application-name: Account Management
+          business-owner: Jane Doe
+          technical-owner: John Smith
+          development-executive: Mary Johnson
+          environment-name: production
+          environment-classification: prod
+          internet-facing: "false"
+          cloud-platform: azure
+          hosting-region: usgovvirginia
+          fedramp-in-scope: "true"
+          cmmc-in-scope: "true"
 
       - name: Run Copilot Security Triage
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          mkdir -p ai/
-      
-          copilot \
-            --model claude-opus-4.7 \
-            -p "
-          You are a senior application security architect operating in a FedRAMP/CMMC CI/CD pipeline.
-          
-          You are analyzing:
-          - pre-collected scan result files located within security-results/*.json
-          - static application/environment context located at ai/env-context.json
-
-          The env-context.json file is temporary static context and will later be replaced by dynamic ServiceNow CMDB/SNOW API calls.
-          Use internet_facing and cloud_platform from env-context.json when determining opa_decision_inputs.internet_exposed_risk and prioritization.
-          
-          TASK:
-          1. Read the files using available shell tools.
-          2. Analyze all findings across:
-             - Secret Findings
-             - Dependabot
-             - CodeQL
-          3. Produce STRICT JSON ONLY (no markdown, no commentary).
-          4. Write output to: ai/ai-triage.json using the write tool.
-          
-          REQUIRED JSON SCHEMA:
-          
-          {
-            \"executive_summary\": \"string\",
-            \"blocking_findings\": [
-              {
-                \"id\": \"string\",
-                \"source\": \"trivy|checkov|semgrep|codeql|other\",
-                \"severity\": \"critical|high|medium|low\",
-                \"title\": \"string\",
-                \"file\": \"string|null\",
-                \"evidence\": \"string\",
-                \"why_blocking\": \"string\",
-                \"recommended_fix\": \"string\",
-                \"fedramp_mappings\": [\"RA-5\", \"SI-2\", \"CM-6\"]
-              }
-            ],
-            \"prioritized_actions\": [
-              {
-                \"priority\": 1,
-                \"owner\": \"AppSec|Platform|Developer|Cloud|IAM\",
-                \"action\": \"string\",
-                \"rationale\": \"string\",
-                \"release_blocking\": true
-              }
-            ],
-            \"likely_false_positives\": [],
-            \"opa_decision_inputs\": {
-              \"block_release\": true,
-              \"critical_count\": 0,
-              \"high_count\": 0,
-              \"secret_or_credential_risk\": false,
-              \"internet_exposed_risk\": false
-            }
-          }
-          
-          RULES:
-          - Output MUST be valid JSON
-          - No markdown fences
-          - No explanation text
-          - If uncertain, escalate severity (do not under-rank risk)
-          - Always assume production exposure unless proven otherwise
-          
-          INPUT DIRECTORY:
-          security-results/
-          " \
-                --allow-tool='shell(cat:*)' \
-                --allow-tool='write' \
-                --allow-tool='shell(cat:security-results/*,ai/env-context.json)' \
-                --no-ask-user
-          
-              cat ai/ai-triage.json
+        id: copilot_triage
+        uses: ./.github/actions/copilot-security-triage
+        with:
+          copilot-github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          model: claude-opus-4.7
+          security-results-directory: security-results
+          env-context-file: ai/env-context.json
+          output-directory: ai
+          output-file-name: ai-triage.json
 
       - name: Validate AI output
         run: |
