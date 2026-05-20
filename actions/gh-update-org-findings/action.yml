@@ -1,0 +1,92 @@
+name: Update Org Findings
+description: Updates reports directory and org_findings.csv from downloaded repo report artifacts.
+
+inputs:
+  central-repo-path:
+    required: true
+
+  downloaded-reports-path:
+    required: true
+
+  org-findings-file:
+    required: false
+    default: org_findings.csv
+
+  reports-directory:
+    required: false
+    default: reports
+
+runs:
+  using: composite
+  steps:
+    - name: Update central reporting files
+      shell: bash
+      env:
+        CENTRAL_REPO: ${{ inputs.central-repo-path }}
+        DOWNLOADED_REPORTS: ${{ inputs.downloaded-reports-path }}
+        ORG_FINDINGS_FILE: ${{ inputs.org-findings-file }}
+        REPORTS_DIR: ${{ inputs.reports-directory }}
+      run: |
+        set -euo pipefail
+
+        cd "$CENTRAL_REPO"
+
+        mkdir -p "$REPORTS_DIR"
+
+        if [ ! -f "$ORG_FINDINGS_FILE" ]; then
+          cat > "$ORG_FINDINGS_FILE" <<'CSV'
+        owner,repo,default_branch,commit_sha,tool,critical,high,medium,low,unknown,total,issue_url,updated_at
+        CSV
+        fi
+
+        TMP_CSV="$(mktemp)"
+        head -n 1 "$ORG_FINDINGS_FILE" > "$TMP_CSV"
+
+        UPDATED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+        find "../${DOWNLOADED_REPORTS}" -name report-summary.json -print0 | while IFS= read -r -d '' SUMMARY; do
+          OWNER="$(jq -r '.owner' "$SUMMARY")"
+          REPO="$(jq -r '.repo' "$SUMMARY")"
+          DEFAULT_BRANCH="$(jq -r '.default_branch' "$SUMMARY")"
+          COMMIT_SHA="$(jq -r '.commit_sha' "$SUMMARY")"
+          ISSUE_URL="$(jq -r '.issue_url // ""' "$SUMMARY")"
+
+          DEST="${REPORTS_DIR}/${OWNER}/${REPO}/${COMMIT_SHA}"
+          mkdir -p "$DEST"
+
+          SRC_DIR="$(dirname "$SUMMARY")"
+          cp -R "$SRC_DIR"/. "$DEST"/
+
+          jq -r \
+            --arg owner "$OWNER" \
+            --arg repo "$REPO" \
+            --arg default_branch "$DEFAULT_BRANCH" \
+            --arg commit_sha "$COMMIT_SHA" \
+            --arg issue_url "$ISSUE_URL" \
+            --arg updated_at "$UPDATED_AT" \
+            '
+            .triage.finding_counts
+            | to_entries[]
+            | [
+                $owner,
+                $repo,
+                $default_branch,
+                $commit_sha,
+                .key,
+                (.value.critical // 0),
+                (.value.high // 0),
+                (.value.medium // 0),
+                (.value.low // 0),
+                (.value.unknown // 0),
+                (.value.total // 0),
+                $issue_url,
+                $updated_at
+              ]
+            | @csv
+            ' "$SUMMARY" >> "$TMP_CSV"
+        done
+
+        mv "$TMP_CSV" "$ORG_FINDINGS_FILE"
+
+        echo "Updated $ORG_FINDINGS_FILE"
+        echo "Updated $REPORTS_DIR/"
