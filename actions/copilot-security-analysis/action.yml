@@ -1,0 +1,251 @@
+name: Copilot Security Analysis
+description: Runs Copilot CLI against source code and exported security findings, producing AI triage JSON, SARIF, and mitigation report.
+
+inputs:
+  copilot-github-token:
+    required: true
+
+  model:
+    required: false
+    default: claude-opus-4.7
+
+  source-directory:
+    required: true
+
+  security-results-directory:
+    required: false
+    default: security-results
+
+  env-context-file:
+    required: false
+    default: ai/env-context.json
+
+  output-directory:
+    required: false
+    default: ai
+
+  sarif-output-file:
+    required: false
+    default: copilot-new-findings.sarif
+
+  mitigation-output-file:
+    required: false
+    default: mitigation-report.md
+
+  triage-output-file:
+    required: false
+    default: ai-triage.json
+
+outputs:
+  sarif-file:
+    value: ${{ steps.run.outputs.sarif-file }}
+
+  mitigation-report-file:
+    value: ${{ steps.run.outputs.mitigation-report-file }}
+
+  ai-triage-file:
+    value: ${{ steps.run.outputs.ai-triage-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run Copilot security analysis
+      id: run
+      shell: bash
+      env:
+        COPILOT_GITHUB_TOKEN: ${{ inputs.copilot-github-token }}
+        MODEL: ${{ inputs.model }}
+        SOURCE_DIR: ${{ inputs.source-directory }}
+        SECURITY_RESULTS_DIR: ${{ inputs.security-results-directory }}
+        ENV_CONTEXT_FILE: ${{ inputs.env-context-file }}
+        OUTPUT_DIR: ${{ inputs.output-directory }}
+        SARIF_NAME: ${{ inputs.sarif-output-file }}
+        MITIGATION_NAME: ${{ inputs.mitigation-output-file }}
+        TRIAGE_NAME: ${{ inputs.triage-output-file }}
+      run: |
+        set -euo pipefail
+
+        mkdir -p "$OUTPUT_DIR"
+
+        SARIF_FILE="${OUTPUT_DIR}/${SARIF_NAME}"
+        MITIGATION_FILE="${OUTPUT_DIR}/${MITIGATION_NAME}"
+        TRIAGE_FILE="${OUTPUT_DIR}/${TRIAGE_NAME}"
+
+        if ! command -v copilot >/dev/null 2>&1; then
+          echo "ERROR: copilot CLI was not found on PATH."
+          exit 1
+        fi
+
+        if ! command -v jq >/dev/null 2>&1; then
+          echo "ERROR: jq was not found on PATH."
+          exit 1
+        fi
+
+        if [ ! -d "$SOURCE_DIR" ]; then
+          echo "ERROR: Source directory not found: $SOURCE_DIR"
+          exit 1
+        fi
+
+        if [ ! -d "$SECURITY_RESULTS_DIR" ]; then
+          echo "ERROR: Security results directory not found: $SECURITY_RESULTS_DIR"
+          exit 1
+        fi
+
+        if [ ! -f "$ENV_CONTEXT_FILE" ]; then
+          echo "ERROR: Environment context file not found: $ENV_CONTEXT_FILE"
+          exit 1
+        fi
+
+        copilot \
+          --model "$MODEL" \
+          -p "
+        You are a senior application security architect operating in a FedRAMP/CMMC CI/CD pipeline.
+
+        You are analyzing:
+        - source code located at: ${SOURCE_DIR}
+        - pre-collected GitHub security alert JSON files located at: ${SECURITY_RESULTS_DIR}
+        - static environment context located at: ${ENV_CONTEXT_FILE}
+
+        TASKS:
+        1. Read the source code and existing GitHub security alert JSON files.
+        2. Review existing alerts from:
+           - secret scanning
+           - Dependabot
+           - CodeQL/code scanning
+        3. Identify likely new security findings not already present in the exported GitHub alerts.
+        4. Produce a SARIF 2.1.0 report for the new AI-assisted findings only.
+        5. Produce a mitigation report that prioritizes the most effective remediation actions across both existing and new findings.
+        6. Produce an AI triage JSON file containing severity counts and prioritized remediation metadata.
+
+        WRITE EXACTLY THESE FILES:
+        - ${SARIF_FILE}
+        - ${MITIGATION_FILE}
+        - ${TRIAGE_FILE}
+
+        REQUIREMENTS FOR ${SARIF_FILE}:
+        - Must be valid SARIF 2.1.0 JSON.
+        - Must use tool.driver.name: \"copilot-ai-security-triage\".
+        - Must include rule IDs for every result.
+        - Must use relative file paths from the repository root where possible.
+        - Must include level values: error, warning, note, or none.
+        - Must include security-severity properties where possible.
+        - Must include runAutomationDetails.id unique to this tool.
+
+        REQUIREMENTS FOR ${MITIGATION_FILE}:
+        - Markdown format.
+        - Include executive summary.
+        - Include existing alert summary.
+        - Include newly discovered AI-assisted findings.
+        - Include prioritized remediation plan.
+        - Include owner recommendations: Developer, AppSec, Platform, IAM, Cloud.
+        - Include FedRAMP/CMMC-aligned rationale where relevant.
+        - Include release-blocking recommendations.
+
+        REQUIREMENTS FOR ${TRIAGE_FILE}:
+        Produce strict JSON with this schema:
+
+        {
+          \"repository\": \"string\",
+          \"executive_summary\": \"string\",
+          \"finding_counts\": {
+            \"secret_scanning\": {
+              \"critical\": 0,
+              \"high\": 0,
+              \"medium\": 0,
+              \"low\": 0,
+              \"unknown\": 0,
+              \"total\": 0
+            },
+            \"dependabot\": {
+              \"critical\": 0,
+              \"high\": 0,
+              \"medium\": 0,
+              \"low\": 0,
+              \"unknown\": 0,
+              \"total\": 0
+            },
+            \"codeql\": {
+              \"critical\": 0,
+              \"high\": 0,
+              \"medium\": 0,
+              \"low\": 0,
+              \"unknown\": 0,
+              \"total\": 0
+            },
+            \"copilot_ai\": {
+              \"critical\": 0,
+              \"high\": 0,
+              \"medium\": 0,
+              \"low\": 0,
+              \"unknown\": 0,
+              \"total\": 0
+            }
+          },
+          \"blocking_findings\": [
+            {
+              \"id\": \"string\",
+              \"source\": \"secret-scanning|dependabot|codeql|copilot-ai\",
+              \"severity\": \"critical|high|medium|low|unknown\",
+              \"title\": \"string\",
+              \"file\": \"string|null\",
+              \"evidence\": \"string\",
+              \"why_blocking\": \"string\",
+              \"recommended_fix\": \"string\",
+              \"fedramp_mappings\": [\"RA-5\", \"SI-2\", \"CM-6\"]
+            }
+          ],
+          \"prioritized_actions\": [
+            {
+              \"priority\": 1,
+              \"owner\": \"AppSec|Platform|Developer|Cloud|IAM\",
+              \"action\": \"string\",
+              \"rationale\": \"string\",
+              \"release_blocking\": true
+            }
+          ],
+          \"likely_false_positives\": [],
+          \"opa_decision_inputs\": {
+            \"block_release\": true,
+            \"critical_count\": 0,
+            \"high_count\": 0,
+            \"secret_or_credential_risk\": false,
+            \"internet_exposed_risk\": false
+          }
+        }
+
+        RULES:
+        - Do not modify source code.
+        - Do not create remediation commits.
+        - Do not invent files that were not observed.
+        - If uncertain about exploitability, explain uncertainty in the mitigation report.
+        - Do not under-rank credential exposure.
+        - Always treat internet-facing workloads as higher priority.
+        - Return no chat commentary; write the required files only.
+        " \
+          --allow-tool="shell(find:${SOURCE_DIR})" \
+          --allow-tool="shell(cat:${SOURCE_DIR}/*,${SECURITY_RESULTS_DIR}/*,${ENV_CONTEXT_FILE})" \
+          --allow-tool="shell(grep:${SOURCE_DIR}/*,${SECURITY_RESULTS_DIR}/*)" \
+          --allow-tool="write" \
+          --no-ask-user
+
+        if [ ! -f "$SARIF_FILE" ]; then
+          echo "ERROR: Missing SARIF output: $SARIF_FILE"
+          exit 1
+        fi
+
+        if [ ! -f "$MITIGATION_FILE" ]; then
+          echo "ERROR: Missing mitigation report: $MITIGATION_FILE"
+          exit 1
+        fi
+
+        if [ ! -f "$TRIAGE_FILE" ]; then
+          echo "ERROR: Missing AI triage JSON: $TRIAGE_FILE"
+          exit 1
+        fi
+
+        jq . "$SARIF_FILE" >/dev/null
+        jq . "$TRIAGE_FILE" >/dev/null
+
+        echo "sarif-file=$SARIF_FILE" >> "$GITHUB_OUTPUT"
+        echo "mitigation-report-file=$MITIGATION_FILE" >> "$GITHUB_OUTPUT"
+        echo "ai-triage-file=$TRIAGE_FILE" >> "$GITHUB_OUTPUT"
