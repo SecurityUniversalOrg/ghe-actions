@@ -1,0 +1,63 @@
+name: Create Central Report PR
+description: Creates a branch and pull request with updated central reporting files.
+
+inputs:
+  token:
+    required: true
+
+  central-repo-path:
+    required: true
+
+  branch-prefix:
+    required: false
+    default: ai-security-triage
+
+  commit-message:
+    required: false
+    default: Update AI security triage reports
+
+  pr-title:
+    required: false
+    default: Update AI security triage reports
+
+  pr-body:
+    required: false
+    default: Updates AI security triage reports.
+
+runs:
+  using: composite
+  steps:
+    - name: Create branch, commit, and PR
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        CENTRAL_REPO: ${{ inputs.central-repo-path }}
+        BRANCH_PREFIX: ${{ inputs.branch-prefix }}
+        COMMIT_MESSAGE: ${{ inputs.commit-message }}
+        PR_TITLE: ${{ inputs.pr-title }}
+        PR_BODY: ${{ inputs.pr-body }}
+      run: |
+        set -euo pipefail
+
+        cd "$CENTRAL_REPO"
+
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        if git diff --quiet && git diff --cached --quiet; then
+          echo "No report changes detected. Skipping PR."
+          exit 0
+        fi
+
+        BRANCH="${BRANCH_PREFIX}/$(date -u +"%Y%m%d%H%M%S")"
+
+        git checkout -b "$BRANCH"
+        git add org_findings.csv reports/
+        git commit -m "$COMMIT_MESSAGE"
+        git push origin "$BRANCH"
+
+        gh pr create \
+          --title "$PR_TITLE" \
+          --body "$PR_BODY" \
+          --base "$(git remote show origin | sed -n '/HEAD branch/s/.*: //p')" \
+          --head "$BRANCH"
