@@ -44,20 +44,36 @@ runs:
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-        if git diff --quiet && git diff --cached --quiet; then
-          echo "No report changes detected. Skipping PR."
-          exit 0
-        fi
+        echo "Current repo status before staging:"
+        git status --short
 
         BRANCH="${BRANCH_PREFIX}/$(date -u +"%Y%m%d%H%M%S")"
 
         git checkout -b "$BRANCH"
+
+        # Stage both tracked changes and new untracked report files.
         git add org_findings.csv reports/
+
+        echo "Current repo status after staging:"
+        git status --short
+
+        # This detects staged tracked changes AND newly added files.
+        if git diff --cached --quiet; then
+          echo "No report changes detected after staging. Skipping PR."
+          exit 0
+        fi
+
         git commit -m "$COMMIT_MESSAGE"
         git push origin "$BRANCH"
+
+        BASE_BRANCH="$(git remote show origin | sed -n '/HEAD branch/s/.*: //p')"
+
+        if [ -z "$BASE_BRANCH" ]; then
+          BASE_BRANCH="$(git branch --show-current)"
+        fi
 
         gh pr create \
           --title "$PR_TITLE" \
           --body "$PR_BODY" \
-          --base "$(git remote show origin | sed -n '/HEAD branch/s/.*: //p')" \
+          --base "$BASE_BRANCH" \
           --head "$BRANCH"
