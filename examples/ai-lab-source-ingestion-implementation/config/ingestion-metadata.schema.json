@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI Security Lab Source Ingestion Metadata",
+  "type": "object",
+  "required": [
+    "artifact_type",
+    "source_repo",
+    "source_branch",
+    "commit_sha",
+    "export_timestamp",
+    "github_run_id",
+    "github_workflow",
+    "github_actor",
+    "sha256_manifest",
+    "non_authoritative_copy"
+  ],
+  "properties": {
+    "artifact_type": { "const": "source-code-snapshot" },
+    "source_repo": { "type": "string" },
+    "source_branch": { "type": "string" },
+    "commit_sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "export_timestamp": { "type": "string", "format": "date-time" },
+    "github_run_id": { "type": "string" },
+    "github_workflow": { "type": "string" },
+    "github_actor": { "type": "string" },
+    "export_reason": { "type": "string" },
+    "sha256_manifest": { "type": "string" },
+    "non_authoritative_copy": { "type": "boolean", "const": true }
+  },
+  "additionalProperties": true
+}

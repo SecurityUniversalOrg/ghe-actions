@@ -1,0 +1,213 @@
+name: Export Source to AI Security Lab
+
+on:
+  workflow_dispatch:
+    inputs:
+      export_reason:
+        description: Reason for exporting this source snapshot
+        required: true
+        type: string
+      include_git_history:
+        description: Include git bundle for point-in-time history snapshot
+        required: true
+        type: boolean
+        default: true
+
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+  id-token: write
+  security-events: read
+
+# Replace these with GitHub repository or organization variables.
+env:
+  AWS_REGION: us-east-1
+  AI_LAB_INGESTION_BUCKET: example-ai-security-lab-source-ingestion
+  AI_LAB_INGESTION_ROLE_ARN: arn:aws:iam::111122223333:role/GitHubSourceExportToAISecurityLab
+  AI_LAB_KMS_KEY_ARN: arn:aws:kms:us-east-1:111122223333:key/REPLACE
+  COSIGN_EXPERIMENTAL: "true"
+
+jobs:
+  export-source:
+    name: Export read-only source snapshot
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source read-only
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate repository allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO="${GITHUB_REPOSITORY}"
+          echo "Validating export allowlist for ${REPO}"
+
+          cat > allowed-repos.txt <<'ALLOWLIST'
+          ExampleOrg/example-app
+          ExampleOrg/example-api
+          ExampleOrg/example-iac
+          ALLOWLIST
+
+          sed -i 's/^ *//' allowed-repos.txt
+
+          if ! grep -Fxq "${REPO}" allowed-repos.txt; then
+            echo "Repository ${REPO} is not approved for AI Lab export."
+            exit 1
+          fi
+
+      - name: Install tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y jq tar gzip
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sudo sh -s -- -b /usr/local/bin
+          curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 -o cosign
+          chmod +x cosign
+          sudo mv cosign /usr/local/bin/cosign
+
+      - name: Create export exclusions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > .ai-lab-export-exclusions.txt <<'EXCLUDES'
+          .git/
+          .env
+          .env.*
+          **/*.pem
+          **/*.key
+          **/*.p12
+          **/*.pfx
+          **/*.jks
+          **/*.keystore
+          **/*id_rsa*
+          **/*id_dsa*
+          **/*id_ecdsa*
+          **/*id_ed25519*
+          **/.terraform/
+          **/*.tfstate
+          **/*.tfstate.*
+          **/terraform.tfvars
+          **/terraform.tfvars.json
+          **/.aws/
+          **/.azure/
+          **/.gcp/
+          **/.kube/
+          **/kubeconfig
+          **/node_modules/
+          **/bin/
+          **/obj/
+          **/target/
+          **/.venv/
+          **/venv/
+          EXCLUDES
+
+      - name: Run secret scan before export
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p export-output
+          trufflehog filesystem . \
+            --json \
+            --exclude-paths .ai-lab-export-exclusions.txt \
+            > export-output/secret-scan-results.json || true
+
+          FINDINGS="$(jq -s 'length' export-output/secret-scan-results.json || echo 0)"
+          echo "Secret scan finding count: ${FINDINGS}"
+
+          if [[ "${FINDINGS}" != "0" ]]; then
+            echo "Secret scan detected potential secrets. Export blocked."
+            exit 1
+          fi
+
+      - name: Build source package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EXPORT_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          PACKAGE_DIR="export-output/package"
+          mkdir -p "${PACKAGE_DIR}"
+
+          git config --unset-all http.https://github.com/.extraheader || true
+          git remote remove origin || true
+
+          tar \
+            --exclude-vcs \
+            --exclude-from=.ai-lab-export-exclusions.txt \
+            -czf "${PACKAGE_DIR}/source.tar.gz" .
+
+          if [[ "${{ inputs.include_git_history || true }}" == "true" ]]; then
+            git bundle create "${PACKAGE_DIR}/source.bundle" HEAD
+          else
+            touch "${PACKAGE_DIR}/source.bundle"
+          fi
+
+          cat > "${PACKAGE_DIR}/metadata.json" <<META
+          {
+            "artifact_type": "source-code-snapshot",
+            "source_repo": "${GITHUB_REPOSITORY}",
+            "source_branch": "${GITHUB_REF_NAME}",
+            "commit_sha": "${GITHUB_SHA}",
+            "export_timestamp": "${EXPORT_TS}",
+            "github_run_id": "${GITHUB_RUN_ID}",
+            "github_workflow": "${GITHUB_WORKFLOW}",
+            "github_actor": "${GITHUB_ACTOR}",
+            "export_reason": "${{ inputs.export_reason || 'scheduled export' }}",
+            "sha256_manifest": "manifest.sha256",
+            "non_authoritative_copy": true
+          }
+          META
+
+          cp export-output/secret-scan-results.json "${PACKAGE_DIR}/secret-scan-results.json"
+          (cd "${PACKAGE_DIR}" && sha256sum * > manifest.sha256)
+
+      - name: Sign manifest
+        shell: bash
+        working-directory: export-output/package
+        run: |
+          set -euo pipefail
+          cosign sign-blob --yes manifest.sha256 \
+            --output-signature manifest.sha256.sig \
+            --output-certificate manifest.sha256.pem
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AI_LAB_INGESTION_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: ai-lab-source-export-${{ github.run_id }}
+
+      - name: Upload source package to AI Lab ingestion bucket
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PREFIX="landing/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/${GITHUB_SHA}/${GITHUB_RUN_ID}"
+
+          aws s3 cp export-output/package/ "s3://${AI_LAB_INGESTION_BUCKET}/${PREFIX}/" \
+            --recursive \
+            --sse aws:kms \
+            --sse-kms-key-id "${AI_LAB_KMS_KEY_ARN}" \
+            --metadata "source-repo=${GITHUB_REPOSITORY},commit-sha=${GITHUB_SHA},github-run-id=${GITHUB_RUN_ID}"
+
+      - name: Produce export summary
+        shell: bash
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<SUMMARY
+          ## AI Lab Source Export Complete
+
+          Repository: \`${GITHUB_REPOSITORY}\`  
+          Branch: \`${GITHUB_REF_NAME}\`  
+          Commit: \`${GITHUB_SHA}\`  
+          Run ID: \`${GITHUB_RUN_ID}\`  
+          Destination Bucket: \`${AI_LAB_INGESTION_BUCKET}\`
+
+          This is a non-authoritative source snapshot for AI Security Lab analysis.
+          SUMMARY

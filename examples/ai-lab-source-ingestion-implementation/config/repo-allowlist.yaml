@@ -1,0 +1,24 @@
+repositories:
+  - org: ExampleOrg
+    name: example-app
+    allowed_branches:
+      - main
+    data_classification: Internal
+    export_schedule: weekly
+    approved_by: security-approvers
+    approval_expires: 2026-12-31
+    allow_git_bundle: true
+    allow_tarball: true
+    allow_lab_repo_mirror: false
+
+  - org: ExampleOrg
+    name: example-api
+    allowed_branches:
+      - main
+    data_classification: Internal
+    export_schedule: weekly
+    approved_by: security-approvers
+    approval_expires: 2026-12-31
+    allow_git_bundle: true
+    allow_tarball: true
+    allow_lab_repo_mirror: false
