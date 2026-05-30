@@ -7,6 +7,12 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Show Terraform fmt diff
+      shell: bash
+      working-directory: envs/aws-gov/us-gov-east-1
+      run: |
+        terraform fmt -recursive -diff -check
+        
     - name: Terraform fmt (check)
       shell: bash
       working-directory: ${{ inputs.tf_dir }}
