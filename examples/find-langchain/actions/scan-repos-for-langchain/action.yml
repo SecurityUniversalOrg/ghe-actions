@@ -1,0 +1,180 @@
+name: Scan Repositories for LangChain
+description: Clones repositories and searches for LangChain usage.
+
+inputs:
+  repos_file:
+    description: JSON file containing repositories to scan.
+    required: true
+
+  raw_findings_file:
+    description: JSONL output file for raw LangChain findings.
+    required: true
+
+  default_branch_only:
+    description: Whether to scan only the default branch.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Clone and scan repositories
+      shell: bash
+      env:
+        REPOS_FILE: ${{ inputs.repos_file }}
+        RAW_FINDINGS_FILE: ${{ inputs.raw_findings_file }}
+        DEFAULT_BRANCH_ONLY: ${{ inputs.default_branch_only }}
+      run: |
+        set -euo pipefail
+
+        if [[ -z "${GH_TOKEN:-}" ]]; then
+          echo "GH_TOKEN is required for cloning private repositories."
+          exit 1
+        fi
+
+        if [[ ! -f "$REPOS_FILE" ]]; then
+          echo "Repository file not found: $REPOS_FILE"
+          exit 1
+        fi
+
+        mkdir -p "$(dirname "$RAW_FINDINGS_FILE")"
+        : > "$RAW_FINDINGS_FILE"
+
+        WORK_DIR="$(mktemp -d)"
+        trap 'rm -rf "$WORK_DIR"' EXIT
+
+        echo "Working directory: $WORK_DIR"
+
+        # Search patterns include common Python, JS/TS, dependency, and config indicators.
+        LANGCHAIN_REGEX='(^|[^A-Za-z0-9_@-])(@langchain|langchain|langchain-core|langchain-community|langchain-openai|langchain-anthropic|langserve|langsmith)([^A-Za-z0-9_-]|$)|from[[:space:]]+langchain|import[[:space:]]+langchain'
+
+        jq -c '.[]' "$REPOS_FILE" | while read -r repo_json; do
+          name_with_owner="$(echo "$repo_json" | jq -r '.nameWithOwner')"
+          url="$(echo "$repo_json" | jq -r '.url')"
+          default_branch="$(echo "$repo_json" | jq -r '.defaultBranchRef.name // empty')"
+          visibility="$(echo "$repo_json" | jq -r '.visibility')"
+
+          repo_dir="$WORK_DIR/$(echo "$name_with_owner" | tr '/' '_')"
+
+          echo "::group::Scanning $name_with_owner"
+
+          clone_url="https://x-access-token:${GH_TOKEN}@github.com/${name_with_owner}.git"
+
+          if [[ "$DEFAULT_BRANCH_ONLY" == "true" && -n "$default_branch" ]]; then
+            git clone \
+              --quiet \
+              --depth 1 \
+              --branch "$default_branch" \
+              "$clone_url" \
+              "$repo_dir" || {
+                echo "Failed to clone $name_with_owner"
+                echo "$repo_json" | jq -c \
+                  --arg status "clone_failed" \
+                  '. + {scan_status: $status}' \
+                  >> "$RAW_FINDINGS_FILE"
+                echo "::endgroup::"
+                continue
+              }
+          else
+            git clone \
+              --quiet \
+              --depth 1 \
+              "$clone_url" \
+              "$repo_dir" || {
+                echo "Failed to clone $name_with_owner"
+                echo "$repo_json" | jq -c \
+                  --arg status "clone_failed" \
+                  '. + {scan_status: $status}' \
+                  >> "$RAW_FINDINGS_FILE"
+                echo "::endgroup::"
+                continue
+              }
+          fi
+
+          pushd "$repo_dir" >/dev/null
+
+          # Search only files that are most likely to contain direct or dependency usage.
+          # Add or remove globs as needed for your enterprise.
+          rg \
+            --json \
+            --hidden \
+            --no-ignore-vcs \
+            --glob '!**/.git/**' \
+            --glob '!**/node_modules/**' \
+            --glob '!**/.venv/**' \
+            --glob '!**/venv/**' \
+            --glob '!**/__pycache__/**' \
+            --glob '!**/dist/**' \
+            --glob '!**/build/**' \
+            --glob '!**/target/**' \
+            --glob '!**/.terraform/**' \
+            --glob '*.py' \
+            --glob '*.ipynb' \
+            --glob '*.js' \
+            --glob '*.jsx' \
+            --glob '*.ts' \
+            --glob '*.tsx' \
+            --glob '*.json' \
+            --glob '*.toml' \
+            --glob '*.yaml' \
+            --glob '*.yml' \
+            --glob '*.txt' \
+            --glob '*.md' \
+            --glob 'requirements*.txt' \
+            --glob 'pyproject.toml' \
+            --glob 'poetry.lock' \
+            --glob 'Pipfile' \
+            --glob 'Pipfile.lock' \
+            --glob 'package.json' \
+            --glob 'package-lock.json' \
+            --glob 'pnpm-lock.yaml' \
+            --glob 'yarn.lock' \
+            --glob 'Dockerfile' \
+            --glob 'Dockerfile.*' \
+            -i "$LANGCHAIN_REGEX" . \
+            | jq -c \
+                --arg repo "$name_with_owner" \
+                --arg repo_url "$url" \
+                --arg default_branch "$default_branch" \
+                --arg visibility "$visibility" \
+                '
+                select(.type == "match")
+                | {
+                    repository: $repo,
+                    repository_url: $repo_url,
+                    default_branch: $default_branch,
+                    visibility: $visibility,
+                    file: .data.path.text,
+                    line_number: .data.line_number,
+                    matched_text: .data.lines.text,
+                    submatches: [.data.submatches[]?.match.text],
+                    finding_type:
+                      (
+                        if (.data.path.text | test("requirements.*\\.txt$|pyproject\\.toml$|poetry\\.lock$|Pipfile|Pipfile\\.lock$"; "i"))
+                        then "python_dependency"
+                        elif (.data.path.text | test("package\\.json$|package-lock\\.json$|pnpm-lock\\.yaml$|yarn\\.lock$"; "i"))
+                        then "node_dependency"
+                        elif (.data.path.text | test("\\.ipynb$"; "i"))
+                        then "notebook_usage"
+                        elif (.data.path.text | test("\\.py$"; "i"))
+                        then "python_source_usage"
+                        elif (.data.path.text | test("\\.(js|jsx|ts|tsx)$"; "i"))
+                        then "javascript_typescript_source_usage"
+                        elif (.data.path.text | test("Dockerfile"; "i"))
+                        then "container_usage"
+                        else "other_reference"
+                        end
+                      )
+                  }
+                ' >> "$RAW_FINDINGS_FILE" || true
+
+          popd >/dev/null
+
+          rm -rf "$repo_dir"
+
+          echo "Completed scan for $name_with_owner"
+          echo "::endgroup::"
+        done
+
+        finding_count="$(wc -l < "$RAW_FINDINGS_FILE" | tr -d ' ')"
+        echo "Raw LangChain findings: $finding_count"

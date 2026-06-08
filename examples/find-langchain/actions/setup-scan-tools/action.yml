@@ -1,0 +1,39 @@
+name: Setup Scan Tools
+description: Installs required tools for repository enumeration and LangChain scanning.
+
+runs:
+  using: composite
+  steps:
+    - name: Verify required tools
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        echo "Checking required tools..."
+
+        command -v git >/dev/null 2>&1 || {
+          echo "git is required but was not found"
+          exit 1
+        }
+
+        command -v gh >/dev/null 2>&1 || {
+          echo "GitHub CLI is required but was not found"
+          exit 1
+        }
+
+        command -v jq >/dev/null 2>&1 || {
+          echo "jq is required but was not found"
+          exit 1
+        }
+
+        if ! command -v rg >/dev/null 2>&1; then
+          echo "ripgrep not found. Installing..."
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
+        fi
+
+        echo "Tool versions:"
+        git --version
+        gh --version
+        jq --version
+        rg --version

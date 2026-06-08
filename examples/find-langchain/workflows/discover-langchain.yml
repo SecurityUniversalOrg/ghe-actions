@@ -1,0 +1,101 @@
+name: Discover LangChain Usage
+
+on:
+  workflow_dispatch:
+    inputs:
+      organization:
+        description: GitHub organization to scan
+        required: true
+        type: string
+
+      include_archived:
+        description: Include archived repositories
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+      include_forks:
+        description: Include forked repositories
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+      max_repos:
+        description: Maximum repositories to scan. Use 0 for no explicit limit.
+        required: false
+        default: "0"
+        type: string
+
+      default_branch_only:
+        description: Scan only the default branch
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+  schedule:
+    # Every Monday at 08:00 UTC
+    - cron: "0 8 * * 1"
+
+permissions:
+  contents: read
+
+env:
+  RESULTS_DIR: langchain-discovery-results
+  REPOS_FILE: langchain-discovery-results/repositories.json
+  RAW_FINDINGS_FILE: langchain-discovery-results/raw-findings.jsonl
+  SUMMARY_FILE: langchain-discovery-results/langchain-summary.csv
+  MARKDOWN_REPORT: langchain-discovery-results/langchain-summary.md
+
+jobs:
+  discover-langchain:
+    name: Discover LangChain usage across org
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout scanner repository
+        uses: actions/checkout@v4
+
+      - name: Setup scan tools
+        uses: ./.github/actions/setup-scan-tools
+
+      - name: List organization repositories
+        uses: ./.github/actions/list-org-repos
+        with:
+          organization: ${{ inputs.organization || github.repository_owner }}
+          include_archived: ${{ inputs.include_archived || 'false' }}
+          include_forks: ${{ inputs.include_forks || 'false' }}
+          max_repos: ${{ inputs.max_repos || '0' }}
+          repos_file: ${{ env.REPOS_FILE }}
+        env:
+          GH_TOKEN: ${{ secrets.ORG_REPO_READ_TOKEN }}
+
+      - name: Scan repositories for LangChain usage
+        uses: ./.github/actions/scan-repos-for-langchain
+        with:
+          repos_file: ${{ env.REPOS_FILE }}
+          raw_findings_file: ${{ env.RAW_FINDINGS_FILE }}
+          default_branch_only: ${{ inputs.default_branch_only || 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.ORG_REPO_READ_TOKEN }}
+
+      - name: Summarize LangChain findings
+        uses: ./.github/actions/summarize-langchain-results
+        with:
+          raw_findings_file: ${{ env.RAW_FINDINGS_FILE }}
+          summary_file: ${{ env.SUMMARY_FILE }}
+          markdown_report: ${{ env.MARKDOWN_REPORT }}
+
+      - name: Upload LangChain discovery results
+        uses: ./.github/actions/upload-langchain-results
+        with:
+          results_dir: ${{ env.RESULTS_DIR }}
+          artifact_name: langchain-discovery-results

@@ -1,0 +1,82 @@
+name: List Organization Repositories
+description: Lists repositories in a GitHub organization and writes repository metadata to JSON.
+
+inputs:
+  organization:
+    description: GitHub organization to scan.
+    required: true
+
+  include_archived:
+    description: Whether to include archived repositories.
+    required: false
+    default: "false"
+
+  include_forks:
+    description: Whether to include forked repositories.
+    required: false
+    default: "false"
+
+  max_repos:
+    description: Maximum repositories to list. Use 0 for no explicit limit.
+    required: false
+    default: "0"
+
+  repos_file:
+    description: Output JSON file containing repositories to scan.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Enumerate organization repositories
+      shell: bash
+      env:
+        ORGANIZATION: ${{ inputs.organization }}
+        INCLUDE_ARCHIVED: ${{ inputs.include_archived }}
+        INCLUDE_FORKS: ${{ inputs.include_forks }}
+        MAX_REPOS: ${{ inputs.max_repos }}
+        REPOS_FILE: ${{ inputs.repos_file }}
+      run: |
+        set -euo pipefail
+
+        if [[ -z "${GH_TOKEN:-}" ]]; then
+          echo "GH_TOKEN is required. Set it to a token with read access to the organization repositories."
+          exit 1
+        fi
+
+        mkdir -p "$(dirname "$REPOS_FILE")"
+
+        LIMIT_FLAG="--limit 10000"
+        if [[ "$MAX_REPOS" != "0" ]]; then
+          LIMIT_FLAG="--limit $MAX_REPOS"
+        fi
+
+        echo "Listing repositories for organization: $ORGANIZATION"
+
+        gh repo list "$ORGANIZATION" \
+          $LIMIT_FLAG \
+          --json name,nameWithOwner,url,sshUrl,isArchived,isFork,defaultBranchRef,visibility \
+          > "$REPOS_FILE.tmp"
+
+        jq \
+          --arg include_archived "$INCLUDE_ARCHIVED" \
+          --arg include_forks "$INCLUDE_FORKS" \
+          '
+          map(
+            select(
+              ($include_archived == "true" or .isArchived == false)
+              and
+              ($include_forks == "true" or .isFork == false)
+            )
+          )
+          ' "$REPOS_FILE.tmp" > "$REPOS_FILE"
+
+        rm -f "$REPOS_FILE.tmp"
+
+        repo_count="$(jq length "$REPOS_FILE")"
+        echo "Repositories selected for scan: $repo_count"
+
+        if [[ "$repo_count" -eq 0 ]]; then
+          echo "No repositories found after filtering."
+          exit 1
+        fi
