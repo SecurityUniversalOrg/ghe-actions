@@ -1,0 +1,141 @@
+name: Count Lines of Code
+
+on:
+  workflow_dispatch:
+    inputs:
+      input_csv:
+        description: "Path to CSV containing repo and branch columns"
+        required: true
+        default: "repo_inventory.csv"
+      output_csv:
+        description: "Path to master LOC report CSV"
+        required: true
+        default: "reports/master_loc_report.csv"
+      create_pr:
+        description: "Create pull request instead of committing directly"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  count-loc:
+    name: Count LOC from repo inventory
+    runs-on: ubuntu-latest
+
+    env:
+      INPUT_CSV: ${{ inputs.input_csv }}
+      OUTPUT_CSV: ${{ inputs.output_csv }}
+      CREATE_PR: ${{ inputs.create_pr }}
+      # Use a PAT if scanning private repos across an org or enterprise.
+      # GITHUB_TOKEN usually only has access to the current repository.
+      SCAN_TOKEN: ${{ secrets.REPO_SCAN_TOKEN }}
+
+    steps:
+      - name: Checkout reporting repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sudo apt-get update
+          sudo apt-get install -y cloc jq python3
+
+          cloc --version
+          jq --version
+          python3 --version
+
+      - name: Validate inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! -f "$INPUT_CSV" ]]; then
+            echo "Input CSV not found: $INPUT_CSV"
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import csv
+          import os
+          import sys
+
+          input_csv = os.environ["INPUT_CSV"]
+
+          with open(input_csv, newline="", encoding="utf-8-sig") as f:
+              reader = csv.DictReader(f)
+              required = {"repo", "branch"}
+              missing = required - set(reader.fieldnames or [])
+              if missing:
+                  print(f"Missing required CSV columns: {', '.join(sorted(missing))}")
+                  sys.exit(1)
+
+          print("Input CSV validation passed.")
+          PY
+
+      - name: Count lines of code
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p reports work tmp
+
+          python3 .github/scripts/count_loc_from_csv.py \
+            --input "$INPUT_CSV" \
+            --output "$OUTPUT_CSV" \
+            --work-dir "work" \
+            --token "$SCAN_TOKEN"
+
+      - name: Show updated report
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Updated LOC report:"
+          column -s, -t < "$OUTPUT_CSV" || cat "$OUTPUT_CSV"
+
+      - name: Commit report directly
+        if: ${{ inputs.create_pr == 'false' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "$OUTPUT_CSV"
+
+          if git diff --cached --quiet; then
+            echo "No LOC report changes detected."
+            exit 0
+          fi
+
+          git commit -m "Update master lines of code report"
+          git push
+
+      - name: Create pull request
+        if: ${{ inputs.create_pr == 'true' }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: automation/update-loc-report
+          delete-branch: true
+          title: "Update master lines of code report"
+          commit-message: "Update master lines of code report"
+          body: |
+            Updates the master lines of code report from the repository inventory CSV.
+
+            Input CSV: `${{ inputs.input_csv }}`
+            Output CSV: `${{ inputs.output_csv }}`
+          add-paths: |
+            ${{ inputs.output_csv }}
